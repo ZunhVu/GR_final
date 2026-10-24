@@ -1,7 +1,7 @@
 using UnityEngine;
 
-[RequireComponent(typeof(Animator))]
-public class FighterAnimator : MonoBehaviour
+
+public class Myrmillo_Animator : MonoBehaviour
 {
     [SerializeField] private Myrmillo_Behavior movement;
     private Animator animator;
