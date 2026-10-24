@@ -5,15 +5,17 @@ using UnityEngine;
 public class DummyBehaviour : MonoBehaviour
 {
     private Rigidbody2D rb;
-    private bool isGrounded = true;
     [SerializeField] private Transform player;
     [SerializeField] private float facingDeadzone = 0.05f;
+    private Collider2D cl;
+
     private bool facingRight=true;
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
         rb.bodyType = RigidbodyType2D.Kinematic;
-        rb.gravityScale = 0f;
+        cl = GetComponent<Collider2D>();
+        //rb.gravityScale = 0f;
         SetFacing(true);
 
     }
