@@ -1480,8 +1480,8 @@ MonoBehaviour:
   opponent: {fileID: 488542843}
   facingDeadzone: 0.05
   facingRight: 1
-  leftWall: {fileID: 0}
-  rightWall: {fileID: 0}
+  leftWall: {fileID: 488768527}
+  rightWall: {fileID: 130743632}
   alwaysBlock: 1
 --- !u!114 &1770529132
 MonoBehaviour:

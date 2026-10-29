@@ -91,7 +91,7 @@ public abstract class BaseFighter : MonoBehaviour
     {
         if (leftWall == null || rightWall == null) return x;
         float minX = leftWall.bounds.max.x + halfWidth;
-        float maxX = rightWall.bounds.min.x + halfWidth;
+        float maxX = rightWall.bounds.min.x - halfWidth;
         return Mathf.Clamp(x, minX, maxX);
     }
     public void ResetFighter()
