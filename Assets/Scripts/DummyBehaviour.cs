@@ -2,39 +2,40 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-public class DummyBehaviour : MonoBehaviour
+public class DummyBehaviour : BaseFighter
 {
+    [SerializeField] private bool alwaysBlock = false;
     private Rigidbody2D rb;
-    [SerializeField] private Transform player;
-    [SerializeField] private float facingDeadzone = 0.05f;
-    private Collider2D cl;
-
-    private bool facingRight=true;
+    private Collider2D cld;
+    //private bool isGrounded = true;
+    private Vector2 startPos;
+    protected override bool WantsToBlock => alwaysBlock;
+    
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
+        cld = GetComponent<Collider2D>();
         rb.bodyType = RigidbodyType2D.Kinematic;
-        cl = GetComponent<Collider2D>();
-        //rb.gravityScale = 0f;
+        rb.gravityScale = 0f;
+        startPos = rb.position;
         SetFacing(true);
 
     }
     private void FixedUpdate()
     {
-        if (player == null) return;
+        TickStun();
+        if (!IsStunned) UpdateFacing();
 
-        float dx = player.position.x - transform.position.x;
-        if (Mathf.Abs(dx) < facingDeadzone) return;
-
-        bool shouldFaceRight = dx > 0f;
-        if (shouldFaceRight != facingRight) SetFacing(shouldFaceRight);
+        Vector2 newPos = rb.position;
+        newPos.x += ConsumePush();
+        newPos.x = ClampToStage(newPos.x, cld.bounds.extents.x);
+        rb.MovePosition(newPos);
     }
-    private void SetFacing(bool right)
+
+    protected override void OnResetFighter()
     {
-        facingRight = right;
-        Vector3 s = transform.localScale;
-        s.x=Mathf.Abs(s.x)*(right?1f:-1f);
-        transform.localScale = s;
+        rb.position = startPos;
+        transform.position = startPos;
+        SetFacing(true);
     }
-
 }
