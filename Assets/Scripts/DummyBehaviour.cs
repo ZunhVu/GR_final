@@ -5,12 +5,15 @@ using UnityEngine;
 public class DummyBehaviour : BaseFighter
 {
     [SerializeField] private bool alwaysBlock = false;
+    //Fake the attack phase the dummy is in, so hits on it count as counter (Startup/Active) or punish counter (Recovery)
+    [SerializeField] private AttackPhase forcedPhase = AttackPhase.None;
     private Rigidbody2D rb;
     private Collider2D cld;
     //private bool isGrounded = true;
     private Vector2 startPos;
     protected override bool WantsToBlock => alwaysBlock;
-    
+    public override AttackPhase CurrentAttackPhase => forcedPhase;
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody2D>();

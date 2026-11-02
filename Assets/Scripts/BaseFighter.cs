@@ -33,15 +33,22 @@ public abstract class BaseFighter : MonoBehaviour
     protected abstract bool WantsToBlock { get; }
     protected virtual bool AllowBlock => true;
     protected virtual void OnInterrupted() { }
-
+    public enum AttackPhase {None, Startup,Active,Recovery}
+    public enum HitType { None, Blocked, Normal, Counter, PunishCounter}
+    public virtual AttackPhase CurrentAttackPhase => AttackPhase.None;
+    public event System.Action<HitType, AttackData> HitReceived;
     //Got hit
-    public void ReceiveHit(AttackData atk, float attackerX)
+    public HitType ReceiveHit(AttackData atk, float attackerX)
     {
-        if (IsKO) return;
+        if (IsKO) return HitType.None;
+
+        AttackPhase phase = CurrentAttackPhase;
         bool blocked = !IsHitstun && AllowBlock && WantsToBlock;
         float pushDir = transform.position.x >= attackerX ? 1f : -1f;//push direction
+        HitType type;
         if (blocked)
         {
+            type= HitType.Blocked;
             if (atk.chipDamage > 0 && FighterHealth != null)
                 FighterHealth.TakeDamage(atk.chipDamage);
             IsHitstun = false;
@@ -52,15 +59,47 @@ public abstract class BaseFighter : MonoBehaviour
         }
         else
         {
-            if (FighterHealth != null) FighterHealth.TakeDamage(atk.damage);
+            int damage = atk.damage;
+            int stun = atk.hitStunTicks;
+
+            if (phase ==AttackPhase.Startup ||phase==AttackPhase.Active)
+            {
+                type = HitType.Counter;
+                damage = Mathf.RoundToInt(damage * SafeMult(atk.counterDamageMultiplier));
+                stun += atk.counterHitBonusStun;
+            }
+            else if (phase==AttackPhase.Recovery)
+            {
+                type = HitType.PunishCounter;
+                damage = Mathf.RoundToInt(damage * SafeMult(atk.punishDamageMultiplier));
+                stun += atk.punishCounterBonusStun;
+            }
+            else
+            {
+                type = HitType.Normal;
+            }
+            if (FighterHealth != null) FighterHealth.TakeDamage(damage);
             IsHitstun = true;
             IsBlockstun = false;
-            stunTicks = atk.hitStunTicks;
+            stunTicks = stun;
             StartPush(pushDir, atk.hitPushback, atk.hitStunTicks);
-            Debug.Log(name + "Hit by " + atk.name);
             
         }
+        Debug.Log(name + " " + type + " by " + atk.name);
         OnInterrupted();
+        HitReceived?.Invoke(type, atk);
+        return type;
+    }
+    private static float SafeMult(float m) => m > 0f ? m : 1f;
+
+    [Header("debug")]
+    [SerializeField] private AttackData debugHit;
+    //Right-click the component (or its ⋮ menu) in Play mode. Hold back while clicking to test blockstun.
+    [ContextMenu("Debug: Receive Hit")]
+    private void DebugReceiveHit()
+    {
+        if (debugHit == null || !debugHit.isValid) { Debug.LogWarning(name + ": fill in Debug Hit first"); return; }
+        ReceiveHit(debugHit, transform.position.x + (facingRight ? 1f : -1f));
     }
 
     protected void TickStun()

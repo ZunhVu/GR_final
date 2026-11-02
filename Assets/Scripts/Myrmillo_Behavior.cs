@@ -163,6 +163,17 @@ public class Myrmillo_Behavior : BaseFighter
         newPos.x = ClampToStage(newPos.x, myCollider.bounds.extents.x);
         rb.MovePosition(newPos);
     }
+
+    public override AttackPhase CurrentAttackPhase
+    {
+        get
+        {
+            if (state != FighterState.Attacking || currentAttack==null) return AttackPhase.None;
+            if (attackTick <= currentAttack.startupTicks) return AttackPhase.Startup;
+            if (attackTick <= currentAttack.startupTicks + currentAttack.activeTicks) return AttackPhase.Active;
+            return AttackPhase.Recovery;
+        }
+    }
     private void OnEnable()
     {
         if (attackAction != null) attackAction.performed += OnAttackPerformed;
@@ -177,6 +188,8 @@ public class Myrmillo_Behavior : BaseFighter
     {
         attackPressed = true;   // just remember the press, FixedUpdate decides what to do with it
     }
+
+    public bool HitBoxActive => CurrentAttackPhase == AttackPhase.Active;
     protected override void OnResetFighter()
     {
         state = FighterState.Idle;
