@@ -19,4 +19,12 @@ public class AttackData
     public float hitPushback;
     public float blockPushback;
     public bool isValid => activeTicks > 0;
+
+    [Header("counter hit")]
+    public float counterDamageMultiplier = 1.2f;
+    public int counterHitBonusStun = 2;
+
+    [Header("punish counter")]
+    public float punishDamageMultiplier = 1.2f;
+    public int punishCounterBonusStun = 4;
 }

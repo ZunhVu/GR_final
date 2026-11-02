@@ -449,6 +449,21 @@ MonoBehaviour:
   facingRight: 1
   leftWall: {fileID: 488768527}
   rightWall: {fileID: 130743632}
+  debugHit:
+    name: 
+    startupTicks: 0
+    activeTicks: 0
+    recoveryTicks: 0
+    damage: 0
+    chipDamage: 0
+    hitStunTicks: 0
+    blockStunTicks: 0
+    hitPushback: 0
+    blockPushback: 0
+    counterDamageMultiplier: 1.2
+    counterHitBonusStun: 2
+    punishDamageMultiplier: 1.2
+    punishCounterBonusStun: 4
   hitbox: {fileID: 1299128204}
   opponentHurtbox: {fileID: 21705910}
   standingLight:
@@ -460,8 +475,12 @@ MonoBehaviour:
     chipDamage: 2
     hitStunTicks: 12
     blockStunTicks: 9
-    hitPushback: 0.1
-    blockPushback: 0.05
+    hitPushback: 0.05
+    blockPushback: 0.1
+    counterDamageMultiplier: 1.2
+    counterHitBonusStun: 2
+    punishDamageMultiplier: 2
+    punishCounterBonusStun: 4
   forwardSpeed: 0.8
   backwardSpeed: 0.7
 --- !u!114 &488542845
@@ -1271,6 +1290,7 @@ GameObject:
   - component: {fileID: 1770529125}
   - component: {fileID: 1770529131}
   - component: {fileID: 1770529132}
+  - component: {fileID: 1770529133}
   m_Layer: 0
   m_Name: Dummy
   m_TagString: Untagged
@@ -1482,7 +1502,23 @@ MonoBehaviour:
   facingRight: 1
   leftWall: {fileID: 488768527}
   rightWall: {fileID: 130743632}
+  debugHit:
+    name: 
+    startupTicks: 0
+    activeTicks: 0
+    recoveryTicks: 0
+    damage: 0
+    chipDamage: 0
+    hitStunTicks: 0
+    blockStunTicks: 0
+    hitPushback: 0
+    blockPushback: 0
+    counterDamageMultiplier: 1.2
+    counterHitBonusStun: 2
+    punishDamageMultiplier: 1.2
+    punishCounterBonusStun: 4
   alwaysBlock: 1
+  forcedPhase: 0
 --- !u!114 &1770529132
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1496,6 +1532,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Health
   maxHealth: 100
+--- !u!114 &1770529133
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1770529124}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 479d4ba7754628e4094512c3c45a574d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Dummy_Animator
+  dummy: {fileID: 1770529131}
 --- !u!1 &1978194991
 GameObject:
   m_ObjectHideFlags: 0
