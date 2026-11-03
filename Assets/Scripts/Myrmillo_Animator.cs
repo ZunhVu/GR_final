@@ -4,7 +4,11 @@ using UnityEngine;
 public class Myrmillo_Animator : MonoBehaviour
 {
     [SerializeField] private Myrmillo_Behavior movement;
+    [Header("draw order")]
+    [SerializeField] private int idleSortingOrder = 1;
+    [SerializeField] private int attackSortingOrder = 2;   // drawn over the opponent while attacking
     private Animator animator;
+    private SpriteRenderer spriteRenderer;
     private bool wasAttacking;
     private static readonly int MoveDirHash = Animator.StringToHash("MoveDir");
     private static readonly int IsAttackingHash = Animator.StringToHash("IsAttacking");
@@ -14,7 +18,11 @@ public class Myrmillo_Animator : MonoBehaviour
     private static readonly int HitHash = Animator.StringToHash("hit");
     private static readonly int BlockHash = Animator.StringToHash("block");
 
-    private void Awake() => animator = GetComponent<Animator>();
+    private void Awake()
+    {
+        animator = GetComponent<Animator>();
+        spriteRenderer = GetComponent<SpriteRenderer>();
+    }
 
     private void OnEnable()
     {
@@ -34,6 +42,8 @@ public class Myrmillo_Animator : MonoBehaviour
 
         bool attacking = movement.IsAttacking;
         animator.SetBool(IsAttackingHash, attacking);
+        if (spriteRenderer != null)
+            spriteRenderer.sortingOrder = attacking ? attackSortingOrder : idleSortingOrder;
 
         // The frame the attack begins, jump straight to the start of the attack clip
         if (attacking && !wasAttacking)
