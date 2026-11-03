@@ -5,6 +5,7 @@ public class Health : MonoBehaviour
     [SerializeField] private int maxHealth = 100;
 
     public int Current { get; private set; }
+    public int Max => maxHealth;
     public bool IsKO => Current <= 0;
 
     private void Awake() => Current = maxHealth;

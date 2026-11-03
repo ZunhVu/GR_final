@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using UnityEngine.Rendering.Universal;
 using static UnityEngine.Rendering.DebugUI.Table;
 
@@ -39,11 +38,8 @@ public class Myrmillo_Behavior : BaseFighter
     //private bool isGrounded = true;
     private Vector2 moveInput;
     private Vector2 velocity;
-    private PlayerInput playerInput;
-    private InputAction moveAction;
     private Collider2D myCollider;
-    private InputAction attackAction;
-    private bool attackPressed;
+    private IFighterController controller;   // player, scripted CPU or RL agent on this GameObject
     public bool IsAttacking => state == FighterState.Attacking;
     private Vector2 startPos;
     private bool startFacingRight;
@@ -66,7 +62,6 @@ public class Myrmillo_Behavior : BaseFighter
         currentAttack = null;
         attackTick = 0;
         hitThisAttack = false;
-        attackPressed = false;
     }
     private void Awake()
     {
@@ -75,14 +70,26 @@ public class Myrmillo_Behavior : BaseFighter
         startFacingRight = facingRight;
         rb.bodyType = RigidbodyType2D.Kinematic;
         rb.gravityScale = 0f;
-        playerInput = GetComponent<PlayerInput>();
         myCollider = GetComponent<Collider2D>();
-        if (playerInput != null)
-        {
-            moveAction = playerInput.actions["Walk"];
-            attackAction = playerInput.actions["Attack"];
-        }
+        controller = FindController();
+        if (controller == null) Debug.LogWarning(name + ": no enabled IFighterController found, fighter will stand still");
+    }
 
+    // Uses the first enabled controller on this GameObject, so you swap who's in control by enabling one and disabling the others
+    private IFighterController FindController()
+    {
+        foreach (IFighterController c in GetComponents<IFighterController>())
+            if (c is Behaviour b && b.enabled) return c;
+        return null;
+    }
+
+    // Lets other code (round setup, training) change who controls this fighter at runtime
+    public void SetController(IFighterController newController) => controller = newController;
+
+    private AttackData GetAttack(int index)
+    {
+        if (index == 0) return standingLight;
+        return null;   // more attacks will be added here
     }
 
     /*
@@ -95,20 +102,21 @@ public class Myrmillo_Behavior : BaseFighter
     private void FixedUpdate()
     {
 
-        /*WALKING*/
-        if (moveAction != null) moveInput = moveAction.ReadValue<Vector2>();
+        /*COMMAND*/
+        FighterCommand cmd = controller != null ? controller.GetCommand(this) : FighterCommand.None;
+        moveInput = new Vector2(cmd.moveX, 0f);
 
         /*ATTACK STATE*/
-        if (attackPressed)
+        if (cmd.attack >= 0 && state == FighterState.Idle && !IsStunned)
         {
-            if (state == FighterState.Idle && !IsStunned)
+            AttackData atk = GetAttack(cmd.attack);
+            if (atk != null && atk.isValid)
             {
                 state = FighterState.Attacking;
-                currentAttack = standingLight;
+                currentAttack = atk;
                 attackTick = 0;
                 hitThisAttack = false;
             }
-            attackPressed = false;
         }
 
         if (state == FighterState.Attacking)
@@ -174,28 +182,12 @@ public class Myrmillo_Behavior : BaseFighter
             return AttackPhase.Recovery;
         }
     }
-    private void OnEnable()
-    {
-        if (attackAction != null) attackAction.performed += OnAttackPerformed;
-    }
-
-    private void OnDisable()
-    {
-        if (attackAction != null) attackAction.performed -= OnAttackPerformed;
-    }
-
-    private void OnAttackPerformed(InputAction.CallbackContext ctx)
-    {
-        attackPressed = true;   // just remember the press, FixedUpdate decides what to do with it
-    }
-
     public bool HitBoxActive => CurrentAttackPhase == AttackPhase.Active;
     protected override void OnResetFighter()
     {
         state = FighterState.Idle;
         currentAttack = null;
         attackTick = 0;
-        attackPressed = false;
         hitThisAttack = false;
         velocity = Vector2.zero;
         moveInput = Vector2.zero;
