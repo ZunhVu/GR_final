@@ -1,0 +1,128 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cb4fd94372742c446a3de141220cebd5, type: 3}
+  m_Name: Myrmillo_Gold
+  m_EditorClassIdentifier: Assembly-CSharp::ColorPalette
+  materials:
+  - name: metal light
+    colors:
+    - serializedVersion: 2
+      rgba: 4287861651
+  - name: metal mid
+    colors:
+    - serializedVersion: 2
+      rgba: 4285887861
+  - name: metal dark
+    colors:
+    - serializedVersion: 2
+      rgba: 4284177243
+  - name: cloth
+    colors:
+    - serializedVersion: 2
+      rgba: 4291548636
+    - serializedVersion: 2
+      rgba: 4289181118
+  swaps:
+  - from:
+      serializedVersion: 2
+      rgba: 4287861651
+    to:
+      serializedVersion: 2
+      rgba: 4280267476
+    where: 1
+    with:
+      serializedVersion: 2
+      rgba: 0
+  - from:
+      serializedVersion: 2
+      rgba: 4285887861
+    to:
+      serializedVersion: 2
+      rgba: 4279733673
+    where: 1
+    with:
+      serializedVersion: 2
+      rgba: 0
+  - from:
+      serializedVersion: 2
+      rgba: 4284177243
+    to:
+      serializedVersion: 2
+      rgba: 4279659133
+    where: 1
+    with:
+      serializedVersion: 2
+      rgba: 0
+  - from:
+      serializedVersion: 2
+      rgba: 4287861651
+    to:
+      serializedVersion: 2
+      rgba: 4280267476
+    where: 3
+    with:
+      serializedVersion: 2
+      rgba: 0
+  - from:
+      serializedVersion: 2
+      rgba: 4285887861
+    to:
+      serializedVersion: 2
+      rgba: 4279733673
+    where: 3
+    with:
+      serializedVersion: 2
+      rgba: 0
+  - from:
+      serializedVersion: 2
+      rgba: 4284177243
+    to:
+      serializedVersion: 2
+      rgba: 4279659133
+    where: 3
+    with:
+      serializedVersion: 2
+      rgba: 0
+  - from:
+      serializedVersion: 2
+      rgba: 4291548636
+    to:
+      serializedVersion: 2
+      rgba: 4280267476
+    where: 4
+    with:
+      serializedVersion: 2
+      rgba: 4289181118
+  - from:
+      serializedVersion: 2
+      rgba: 4289181118
+    to:
+      serializedVersion: 2
+      rgba: 4279733673
+    where: 0
+    with:
+      serializedVersion: 2
+      rgba: 0
+  - from:
+      serializedVersion: 2
+      rgba: 4291548636
+    to:
+      serializedVersion: 2
+      rgba: 4280558799
+    where: 2
+    with:
+      serializedVersion: 2
+      rgba: 0
+  tolerance: 2
+  topLimit: 0.25
+  bottomLimit: 0.65
+  bottomReach: 0.85

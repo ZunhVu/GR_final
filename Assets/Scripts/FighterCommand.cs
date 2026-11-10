@@ -1,11 +1,10 @@
 using UnityEngine;
 
-// What a fighter is told to do for one tick. Players, scripted CPUs and RL agents all speak through this,
-// so the fighter enforces the same rules (startup, stun, block) whoever is in control.
+// What a fighter is told to do for one tick. Players, scripted CPUs and RL agents all speak through this, so the fighter enforces the same rules (startup, stun, block) whoever is in control.
 public struct FighterCommand
 {
     public float moveX;   // -1 left, 0 none, +1 right (screen direction, not facing)
-    public int attack;    // -1 = no attack, otherwise the attack index (0 = standing light)
+    public int attack;    // -1 = no attack, otherwise the attack index 
 
     public static FighterCommand None => new FighterCommand { moveX = 0f, attack = -1 };
 }

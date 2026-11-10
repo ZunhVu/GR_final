@@ -1,143 +1,134 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Palette swap: plays another character's animations in different colours without new art.
+// Palette swap: plays a character's animations in different colours without new art.
 // Runs after the Animator each frame and replaces the sprite it picked with a recoloured copy.
-// Each sprite frame is recoloured once and cached.
-//
-// Rules can depend on which part of the body a pixel is in. A "part" is a group of touching pixels
-// whose colours are all in the same material (for example the three metal greys), so the helmet,
-// the blade and the shin guard are separate parts even though they use the same colours.
+// Each sprite frame is recoloured once and cached. The rules live in a ColorPalette asset;
+// with no palette set, the sprite is left alone.
 [RequireComponent(typeof(SpriteRenderer))]
 public class SpriteRecolor : MonoBehaviour
 {
-    public enum Where
-    {
-        Everywhere,
-        TopPart,        // part starts near the top of the sprite (helmet)
-        MiddlePart,     // part is neither top nor bottom (blade)
-        BottomPart,     // part starts low and reaches the feet (shin guard)
-        NextToColor,    // the pixel touches the "with" colour, diagonals included (arm wrap is light and shadow mixed)
-    }
-
-    [System.Serializable]
-    public class PartMaterial
-    {
-        public string name;
-        public List<Color32> colors = new List<Color32>();
-    }
-
-    [System.Serializable]
-    public class ColorSwap
-    {
-        public Color32 from;
-        public Color32 to;
-        public Where where;
-        public Color32 with;   // only used by NextToColor
-    }
-
-    [Tooltip("Colours that count as one material when finding parts")]
-    [SerializeField] private List<PartMaterial> materials = new List<PartMaterial>();
-    [Tooltip("Checked in order, the first rule that matches a pixel wins. Pixels with no matching rule keep their colour.")]
-    [SerializeField] private List<ColorSwap> swaps = new List<ColorSwap>();
-    [SerializeField, Range(0, 16)] private int tolerance = 2;   // per channel, 0-255, in case of compression
-
-    [Header("part position (fraction of sprite height, from the top)")]
-    [SerializeField, Range(0f, 1f)] private float topLimit = 0.25f;      // a part starting above this is a top part
-    [SerializeField, Range(0f, 1f)] private float bottomLimit = 0.65f;   // a bottom part starts below this...
-    [SerializeField, Range(0f, 1f)] private float bottomReach = 0.85f;   // ...and reaches below this (the feet)
+    [SerializeField] private ColorPalette palette;
 
     private SpriteRenderer sr;
-    private readonly Dictionary<Texture2D, Texture2D> textures = new Dictionary<Texture2D, Texture2D>();
+    private readonly List<Texture2D> textures = new List<Texture2D>();   // one per recoloured frame
     private readonly Dictionary<Texture2D, Color32[]> sourcePixels = new Dictionary<Texture2D, Color32[]>();
+    private bool warnedTight;
     private readonly Dictionary<Sprite, Sprite> sprites = new Dictionary<Sprite, Sprite>();
-    private readonly HashSet<Sprite> recolored = new HashSet<Sprite>();
+    private readonly Dictionary<Sprite, Sprite> originals = new Dictionary<Sprite, Sprite>();   // copy -> original
 
     private void Awake() => sr = GetComponent<SpriteRenderer>();
 
-    // Filled in when the component is first added: Myrmillo's helmet, arm guard and shin guard turn gold,
-    // and the lower body cloth turns red. Everything else (blade, shield, ankle wrap, skin) keeps its colour.
-    private void Reset()
+    private void Start()
     {
-        Color32 metalLight = C(0x939393), metalMid = C(0x757575), metalDark = C(0x5B5B5B);
-        Color32 armLight = C(0xDCD5CB), armShadow = C(0xBEB5A7);
-        Color32 gold = C(0xD4B21F), darkGold = C(0xA98D17), darkestGold = C(0x7D6A16), red = C(0xCF2424);
-
-        // Each metal shade is its own material, so the grey shield in the damaged frames doesn't join up with the shin guard
-        materials = new List<PartMaterial>
-        {
-            new PartMaterial { name = "metal light", colors = new List<Color32> { metalLight } },
-            new PartMaterial { name = "metal mid",   colors = new List<Color32> { metalMid } },
-            new PartMaterial { name = "metal dark",  colors = new List<Color32> { metalDark } },
-            new PartMaterial { name = "cloth",       colors = new List<Color32> { armLight, armShadow } },
-        };
-        swaps = new List<ColorSwap>
-        {
-            // helmet
-            new ColorSwap { from = metalLight, to = gold,        where = Where.TopPart },
-            new ColorSwap { from = metalMid,   to = darkGold,    where = Where.TopPart },
-            new ColorSwap { from = metalDark,  to = darkestGold, where = Where.TopPart },
-            // shin guard
-            new ColorSwap { from = metalLight, to = gold,        where = Where.BottomPart },
-            new ColorSwap { from = metalMid,   to = darkGold,    where = Where.BottomPart },
-            new ColorSwap { from = metalDark,  to = darkestGold, where = Where.BottomPart },
-            // arm guard: light and shadow pixels alternate, so its light pixels always touch a shadow pixel
-            new ColorSwap { from = armLight,  to = gold,     where = Where.NextToColor, with = armShadow },
-            new ColorSwap { from = armShadow, to = darkGold, where = Where.Everywhere },
-            // lower body cloth: the light cloth left in the middle of the body (the ankle wrap is a bottom part, so it stays)
-            new ColorSwap { from = armLight,  to = red,      where = Where.MiddlePart },
-        };
+        if (palette != null) Prewarm();   // a palette set in the Inspector
     }
 
-    private static Color32 C(int rgb) => new Color32((byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb, 255);
+    // Switch palette at runtime (MatchSetup uses this for player 2 in a mirror match). Null turns recolouring off.
+    public void SetPalette(ColorPalette newPalette)
+    {
+        if (sr == null) sr = GetComponent<SpriteRenderer>();
+        if (sr.sprite != null && originals.TryGetValue(sr.sprite, out Sprite original)) sr.sprite = original;
+        ClearCache();
+        palette = newPalette;
+        if (palette != null && Application.isPlaying) Prewarm();
+    }
+
+    // Recolours every frame of every animation now, so nothing has to be made mid-fight.
+    // Making a frame is slow (it reads the texture back from the GPU), and a slow frame during a fight
+    // makes the game skip ahead to catch up, which looks like a fighter teleporting.
+    public void Prewarm()
+    {
+        Animator anim = GetComponent<Animator>();
+        if (palette == null || anim == null || anim.runtimeAnimatorController == null) return;
+
+        Sprite current = sr.sprite;
+        foreach (AnimationClip clip in anim.runtimeAnimatorController.animationClips)
+        {
+            int frames = Mathf.Max(1, Mathf.CeilToInt(clip.length * clip.frameRate));
+            for (int f = 0; f <= frames; f++)
+            {
+                clip.SampleAnimation(gameObject, Mathf.Min(f / clip.frameRate, clip.length));
+                Sprite s = sr.sprite;
+                if (s == null || originals.ContainsKey(s) || sprites.ContainsKey(s)) continue;
+                Sprite copy = MakeSprite(s);
+                sprites[s] = copy;
+                originals[copy] = s;
+            }
+        }
+        sr.sprite = current;
+    }
 
     private void LateUpdate()
     {
         Sprite s = sr.sprite;
-        if (s == null || recolored.Contains(s)) return;
+        if (palette == null || s == null || originals.ContainsKey(s)) return;
 
         if (!sprites.TryGetValue(s, out Sprite copy))
         {
             copy = MakeSprite(s);
             sprites[s] = copy;
-            recolored.Add(copy);
+            originals[copy] = s;   // when a frame can't be recoloured, copy is the original itself
         }
         sr.sprite = copy;
     }
 
     private Sprite MakeSprite(Sprite s)
     {
-        Texture2D src = s.texture;
-        if (!textures.TryGetValue(src, out Texture2D tex))
+        // In Play mode sprites can be packed into a Sprite Atlas: s.texture is then the atlas, and the frame's
+        // pixels sit at s.textureRect (possibly trimmed, shifted by textureRectOffset), not at s.rect.
+        // Tight-packed sprites aren't rectangles in the atlas, so they can't be copied this way.
+        if (s.packed && s.packingMode == SpritePackingMode.Tight)
         {
-            Color32[] px = ReadPixels(src);
-            sourcePixels[src] = px;
-            tex = new Texture2D(src.width, src.height, TextureFormat.RGBA32, false);
-            tex.filterMode = src.filterMode;
-            tex.wrapMode = TextureWrapMode.Clamp;
-            tex.SetPixels32(px);
-            tex.name = src.name + " (recolor)";
-            textures[src] = tex;
+            if (!warnedTight)
+            {
+                Debug.LogWarning(name + ": can't recolour tight-packed sprite " + s.name +
+                                 ". Turn off Tight Packing on its Sprite Atlas, or untick Generate Sprite Atlas on the .aseprite file.");
+                warnedTight = true;
+            }
+            return s;
         }
 
-        RectInt r = new RectInt((int)s.rect.x, (int)s.rect.y, (int)s.rect.width, (int)s.rect.height);
-        tex.SetPixels32(r.x, r.y, r.width, r.height, Recolor(sourcePixels[src], src.width, r));
-        tex.Apply();
+        Texture2D src = s.texture;
+        if (!sourcePixels.TryGetValue(src, out Color32[] all))
+        {
+            all = ReadPixels(src);
+            sourcePixels[src] = all;
+        }
 
-        Sprite copy = Sprite.Create(tex, s.rect, new Vector2(s.pivot.x / s.rect.width, s.pivot.y / s.rect.height),
+        Rect from = s.packed ? s.textureRect : s.rect;
+        Vector2 offset = s.packed ? s.textureRectOffset : Vector2.zero;
+        int w = Mathf.RoundToInt(s.rect.width), h = Mathf.RoundToInt(s.rect.height);
+        Color32[] px = new Color32[w * h];   // starts fully transparent
+        int fx = Mathf.RoundToInt(from.x), fy = Mathf.RoundToInt(from.y);
+        int fw = Mathf.RoundToInt(from.width), fh = Mathf.RoundToInt(from.height);
+        int ox = Mathf.RoundToInt(offset.x), oy = Mathf.RoundToInt(offset.y);
+        for (int y = 0; y < fh; y++)
+            for (int x = 0; x < fw; x++)
+            {
+                int tx = ox + x, ty = oy + y;
+                if (tx < 0 || ty < 0 || tx >= w || ty >= h) continue;
+                px[ty * w + tx] = all[(fy + y) * src.width + fx + x];
+            }
+
+        Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+        tex.filterMode = src.filterMode;
+        tex.wrapMode = TextureWrapMode.Clamp;
+        tex.SetPixels32(Recolor(px, w, h));
+        tex.Apply();
+        tex.name = s.name + " (recolor)";
+        textures.Add(tex);
+
+        // Same size and pivot as the original frame, so it lines up exactly
+        Sprite copy = Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(s.pivot.x / s.rect.width, s.pivot.y / s.rect.height),
             s.pixelsPerUnit, 0, SpriteMeshType.FullRect, s.border);
         copy.name = s.name + " (recolor)";
         return copy;
     }
 
-    // Recolours one sprite's rectangle and returns its pixels (row 0 = bottom, like the texture)
-    private Color32[] Recolor(Color32[] all, int texWidth, RectInt r)
+    // Recolours one frame's pixels (w x h, row 0 = bottom) and returns them
+    private Color32[] Recolor(Color32[] px, int w, int h)
     {
-        int w = r.width, h = r.height;
-        Color32[] px = new Color32[w * h];
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-                px[y * w + x] = all[(r.y + y) * texWidth + r.x + x];
 
         // Label parts: flood fill touching pixels of the same material
         int[] material = new int[px.Length];
@@ -180,9 +171,9 @@ public class SpriteRecolor : MonoBehaviour
         {
             if (px[i].a == 0) continue;
             PartInfo p = part[i] >= 0 ? parts[part[i]] : null;
-            foreach (ColorSwap sw in swaps)
+            foreach (ColorPalette.ColorSwap sw in palette.swaps)
             {
-                if (!Close(orig[i], sw.from) || !Matches(sw, p, h, orig, i, w)) continue;
+                if (!palette.Close(orig[i], sw.from) || !Matches(sw, p, h, orig, i, w)) continue;
                 px[i] = new Color32(sw.to.r, sw.to.g, sw.to.b, px[i].a);
                 break;
             }
@@ -195,18 +186,18 @@ public class SpriteRecolor : MonoBehaviour
         public int top, bottom;   // highest and lowest row of the part, counted from the top of the sprite
     }
 
-    private bool Matches(ColorSwap sw, PartInfo p, int height, Color32[] px, int i, int w)
+    private bool Matches(ColorPalette.ColorSwap sw, PartInfo p, int height, Color32[] px, int i, int w)
     {
-        if (sw.where == Where.Everywhere) return true;
-        if (sw.where == Where.NextToColor) return TouchesColor(px, i, w, sw.with);
+        if (sw.where == ColorPalette.Where.Everywhere) return true;
+        if (sw.where == ColorPalette.Where.NextToColor) return TouchesColor(px, i, w, sw.with);
         if (p == null) return false;   // colour isn't in any material, so it has no part
-        bool top = p.top < topLimit * height;
-        bool bottom = p.top >= bottomLimit * height && p.bottom >= bottomReach * height;
+        bool top = p.top < palette.topLimit * height;
+        bool bottom = p.top >= palette.bottomLimit * height && p.bottom >= palette.bottomReach * height;
         switch (sw.where)
         {
-            case Where.TopPart: return top;
-            case Where.BottomPart: return bottom && !top;
-            case Where.MiddlePart: return !top && !bottom;
+            case ColorPalette.Where.TopPart: return top;
+            case ColorPalette.Where.BottomPart: return bottom && !top;
+            case ColorPalette.Where.MiddlePart: return !top && !bottom;
         }
         return false;
     }
@@ -220,7 +211,7 @@ public class SpriteRecolor : MonoBehaviour
                 int nx = x + dx, ny = y + dy;
                 if ((dx == 0 && dy == 0) || nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
                 Color32 n = px[ny * w + nx];
-                if (n.a > 0 && Close(n, color)) return true;
+                if (n.a > 0 && palette.Close(n, color)) return true;
             }
         return false;
     }
@@ -228,8 +219,8 @@ public class SpriteRecolor : MonoBehaviour
     private int MaterialOf(Color32 c)
     {
         if (c.a == 0) return -1;
-        for (int m = 0; m < materials.Count; m++)
-            if (materials[m].colors.Exists(mc => Close(mc, c))) return m;
+        for (int m = 0; m < palette.materials.Count; m++)
+            if (palette.materials[m].colors.Exists(mc => palette.Close(mc, c))) return m;
         return -1;
     }
 
@@ -253,12 +244,16 @@ public class SpriteRecolor : MonoBehaviour
         return px;
     }
 
-    private bool Close(Color32 a, Color32 b) =>
-        Mathf.Abs(a.r - b.r) <= tolerance && Mathf.Abs(a.g - b.g) <= tolerance && Mathf.Abs(a.b - b.b) <= tolerance;
-
-    private void OnDestroy()
+    private void ClearCache()
     {
-        foreach (Sprite s in recolored) Destroy(s);
-        foreach (Texture2D t in textures.Values) Destroy(t);
+        foreach (KeyValuePair<Sprite, Sprite> pair in sprites)
+            if (pair.Value != pair.Key) Destroy(pair.Value);   // never destroy an original we passed through unchanged
+        foreach (Texture2D t in textures) Destroy(t);
+        sprites.Clear();
+        originals.Clear();
+        textures.Clear();
+        sourcePixels.Clear();
     }
+
+    private void OnDestroy() => ClearCache();
 }

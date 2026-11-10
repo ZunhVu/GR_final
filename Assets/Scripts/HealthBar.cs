@@ -8,6 +8,8 @@ public class HealthBar : MonoBehaviour
     [SerializeField] private Health target;
     [SerializeField] private Image fill;
     [SerializeField] private Image damageTrail;
+    [Tooltip("Optional: shows the character's portrait")]
+    [SerializeField] private Image portrait;
 
     [Header("damage trail")]
     [SerializeField] private float trailDelay = 0.4f;      // seconds before the trail starts sliding down
@@ -19,6 +21,13 @@ public class HealthBar : MonoBehaviour
 
     private void Awake()
     {
+        // fillAmount only does anything on a Filled image, so make sure the fill is one (keeps its Fill Origin)
+        if (fill != null)
+        {
+            fill.type = Image.Type.Filled;
+            fill.fillMethod = Image.FillMethod.Horizontal;
+        }
+
         if (damageTrail == null)
         {
             Debug.LogWarning(name + ": HealthBar has no Damage Trail assigned");
@@ -31,6 +40,17 @@ public class HealthBar : MonoBehaviour
             damageTrail.fillMethod = fill.fillMethod;
             damageTrail.fillOrigin = fill.fillOrigin;
         }
+    }
+
+    // MatchSetup calls this once the fighters are spawned
+    public void SetTarget(Health health, Sprite portraitSprite)
+    {
+        target = health;
+        lastPct = 1f;
+        delayTimer = 0f;
+        if (fill != null) fill.fillAmount = 1f;
+        if (damageTrail != null) damageTrail.fillAmount = 1f;
+        if (portrait != null && portraitSprite != null) portrait.sprite = portraitSprite;
     }
 
     private void Update()
