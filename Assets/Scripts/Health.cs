@@ -18,4 +18,11 @@ public class Health : MonoBehaviour
     }
 
     public void ResetHealth() => Current = maxHealth;
+
+    // Used when a character is spawned: its CharacterData decides the max
+    public void SetMax(int max)
+    {
+        maxHealth = Mathf.Max(1, max);
+        Current = maxHealth;
+    }
 }

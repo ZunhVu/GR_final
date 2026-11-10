@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 04dcf2736b8df0344a27af9d8236cf39, type: 3}
+  m_Name: Myrmillo
+  m_EditorClassIdentifier: Assembly-CSharp::CharacterData
+  displayName: Myrmillo
+  portrait: {fileID: 9068396581608780723, guid: 4a4225b537e211545a87f1a54a85cb78, type: 3}
+  prefab: {fileID: 8223876077493428111, guid: 9e11fb675b8e5324f859920be02fab0f, type: 3}
+  maxHealth: 100
+  forwardSpeed: 0.5
+  backwardSpeed: 0.4
+  hurtboxOffset: {x: 0.005, y: 0.155}
+  hurtboxSize: {x: 0.15, y: 0.31}
+  attacks:
+  - name: stab
+    animationState: standing_light
+    startupTicks: 5
+    activeTicks: 3
+    recoveryTicks: 9
+    hitboxOffset: {x: 0.105, y: 0.156}
+    hitboxSize: {x: 0.1, y: 0.1}
+    extraHurtboxOffset: {x: 0.1, y: 0.156}
+    extraHurtboxSize: {x: 0.08, y: 0.05}
+    extraHurtboxStartTick: 6
+    extraHurtboxEndTick: 0
+    damage: 5
+    chipDamage: 1
+    hitStunTicks: 13
+    blockStunTicks: 8
+    hitPushback: 0.05
+    blockPushback: 0.1
+    counterDamageMultiplier: 1.2
+    counterHitBonusStun: 4
+    punishDamageMultiplier: 2
+    punishCounterBonusStun: 8
+  altPalette: {fileID: 11400000, guid: 3138dd9196ff01e4d84f22f44abda2d1, type: 2}
