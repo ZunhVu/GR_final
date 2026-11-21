@@ -20,8 +20,15 @@ public class CharacterData : ScriptableObject
     public Vector2 hurtboxOffset = new Vector2(0f, 0.155f);
     public Vector2 hurtboxSize = new Vector2(0.15f, 0.31f);
 
+    [Header("crouching hurtbox (same units as the standing one)")]
+    public Vector2 crouchHurtboxOffset = new Vector2(0f, 0.105f);
+    public Vector2 crouchHurtboxSize = new Vector2(0.15f, 0.21f);
+
     [Header("attacks (index 0, 1, 2 ... = what controllers ask for)")]
+    [Tooltip("Used while standing")]
     public List<AttackData> attacks = new List<AttackData>();
+    [Tooltip("Used while crouching, e.g. a low attack at index 0. The same attack button gives these when crouching.")]
+    public List<AttackData> crouchAttacks = new List<AttackData>();
 
     [Header("mirror match")]
     [Tooltip("Colours for player 2 when both players pick this character. Leave empty to use the same colours.")]

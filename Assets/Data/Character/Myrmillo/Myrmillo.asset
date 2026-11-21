@@ -20,10 +20,13 @@ MonoBehaviour:
   backwardSpeed: 0.4
   hurtboxOffset: {x: 0.005, y: 0.155}
   hurtboxSize: {x: 0.15, y: 0.31}
+  crouchHurtboxOffset: {x: 0, y: 0.105}
+  crouchHurtboxSize: {x: 0.15, y: 0.21}
   attacks:
   - name: stab
     animationState: standing_light
-    startupTicks: 5
+    height: 0
+    startupTicks: 6
     activeTicks: 3
     recoveryTicks: 9
     hitboxOffset: {x: 0.105, y: 0.156}
@@ -32,13 +35,36 @@ MonoBehaviour:
     extraHurtboxSize: {x: 0.08, y: 0.05}
     extraHurtboxStartTick: 6
     extraHurtboxEndTick: 0
-    damage: 5
+    damage: 4
     chipDamage: 1
     hitStunTicks: 13
     blockStunTicks: 8
     hitPushback: 0.05
     blockPushback: 0.1
     counterDamageMultiplier: 1.2
+    counterHitBonusStun: 4
+    punishDamageMultiplier: 2
+    punishCounterBonusStun: 8
+  crouchAttacks:
+  - name: low stab
+    animationState: crouching_light
+    height: 1
+    startupTicks: 5
+    activeTicks: 2
+    recoveryTicks: 7
+    hitboxOffset: {x: 0.105, y: 0.1}
+    hitboxSize: {x: 0.1, y: 0.1}
+    extraHurtboxOffset: {x: 0, y: 0}
+    extraHurtboxSize: {x: 0, y: 0}
+    extraHurtboxStartTick: 0
+    extraHurtboxEndTick: 0
+    damage: 4
+    chipDamage: 1
+    hitStunTicks: 13
+    blockStunTicks: 8
+    hitPushback: 0.02
+    blockPushback: 0.04
+    counterDamageMultiplier: 1.1
     counterHitBonusStun: 4
     punishDamageMultiplier: 2
     punishCounterBonusStun: 8

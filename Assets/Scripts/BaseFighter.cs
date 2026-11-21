@@ -28,6 +28,10 @@ public abstract class BaseFighter : MonoBehaviour
     public bool FacingRight => facingRight;
     public BaseFighter Opponent => opponent;
 
+    // Set by RoundManager before a round starts and after it ends: the controller's commands are ignored
+    // (the fighter stands still), but attacks and stun already running still finish.
+    public bool InputLocked { get; set; }
+
     // Set by MatchSetup when the fighters are spawned
     public void SetOpponent(BaseFighter other) => opponent = other;
     public void SetStage(Collider2D left, Collider2D right)
@@ -68,6 +72,9 @@ public abstract class BaseFighter : MonoBehaviour
     protected abstract void OnResetFighter();
     protected abstract bool WantsToBlock { get; }
     protected virtual bool AllowBlock => true;
+    // Can the current posture block this attack's height? (Fighter: lows need a crouching block)
+    protected virtual bool CanBlock(AttackData atk) => true;
+    public virtual bool IsCrouching => false;
     protected virtual void OnInterrupted() { }
     public enum AttackPhase {None, Startup,Active,Recovery}
     public enum HitType { None, Blocked, Normal, Counter, PunishCounter}
@@ -101,17 +108,18 @@ public abstract class BaseFighter : MonoBehaviour
         Advance();
         soloHits.Clear();
         CollectHits(soloHits);
-        foreach (PendingHit h in soloHits) h.target.ReceiveHit(h.attack, h.attackerX);   // solo: no advantage log
+        foreach (PendingHit h in soloHits) h.target.ReceiveHit(h.attack, h.attackerX, h.attacker);   // solo: no advantage log
         Move();
     }
 
     //Got hit
-    public HitType ReceiveHit(AttackData atk, float attackerX)
+    // attacker is optional: when given, pushback goes to the attacker instead if this fighter is already cornered
+    public HitType ReceiveHit(AttackData atk, float attackerX, BaseFighter attacker = null)
     {
         if (IsKO) return HitType.None;
 
         AttackPhase phase = CurrentAttackPhase;
-        bool blocked = !IsHitstun && AllowBlock && WantsToBlock;
+        bool blocked = !IsHitstun && AllowBlock && WantsToBlock && CanBlock(atk);
         float pushDir = transform.position.x >= attackerX ? 1f : -1f;//push direction
         HitType type;
         if (blocked)
@@ -123,7 +131,7 @@ public abstract class BaseFighter : MonoBehaviour
             IsBlockstun = true;
             stunTicks = atk.blockStunTicks;
             stunStartedThisTick = true;
-            StartPush(pushDir, atk.blockPushback, atk.blockStunTicks);
+            ApplyPushback(pushDir, atk.blockPushback, atk.blockStunTicks, attacker);
             Debug.Log(name + " Blocked " + atk.name);
         }
         else
@@ -152,7 +160,7 @@ public abstract class BaseFighter : MonoBehaviour
             IsBlockstun = false;
             stunTicks = stun;
             stunStartedThisTick = true;
-            StartPush(pushDir, atk.hitPushback, atk.hitStunTicks);
+            ApplyPushback(pushDir, atk.hitPushback, atk.hitStunTicks, attacker);
             
         }
         Debug.Log(name + " " + type + " by " + atk.name);
@@ -185,6 +193,38 @@ public abstract class BaseFighter : MonoBehaviour
         {
             IsHitstun = false;
             IsBlockstun = false;
+        }
+    }
+
+    // Pushes this fighter away from the hit, or, if it's already against the wall it would be pushed into,
+    // pushes the attacker back instead (the cornered fighter can't move, so the attacker gives the space)
+    private void ApplyPushback(float dir, float distance, int ticks, BaseFighter attacker)
+    {
+        if (attacker != null && attacker != this && IsAgainstWall(dir))
+            attacker.StartPush(-dir, distance, ticks);
+        else
+            StartPush(dir, distance, ticks);
+    }
+
+    // True if this fighter is touching the wall on the given side (+1 = right wall, -1 = left wall)
+    public bool IsAgainstWall(float dir)
+    {
+        if (leftWall == null || rightWall == null) return false;
+        float x = transform.position.x;
+        float half = BodyHalfWidth;
+        const float touching = 0.001f;   // allow for rounding
+        if (dir > 0f) return x >= rightWall.bounds.min.x - half - touching;
+        return x <= leftWall.bounds.max.x + half + touching;
+    }
+
+    // Half the body's width, the same value used to keep the body inside the walls
+    private Collider2D body;
+    protected float BodyHalfWidth
+    {
+        get
+        {
+            if (body == null) body = GetComponent<Collider2D>();
+            return body != null ? body.bounds.extents.x : 0f;
         }
     }
 

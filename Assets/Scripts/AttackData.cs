@@ -1,10 +1,20 @@
 using UnityEngine;
+
+// How an attack must be blocked
+public enum AttackHeight
+{
+    Mid,   // blocked standing or crouching
+    Low,   // only blocked crouching
+}
+
 [System.Serializable]
 public class AttackData
 {
     public string name;
     [Tooltip("Animator state played when this attack starts")]
     public string animationState;
+    [Tooltip("Mid: blocked standing or crouching. Low: only blocked crouching.")]
+    public AttackHeight height = AttackHeight.Mid;
 
     [Header("frame data (ticks)")]
     public int startupTicks;

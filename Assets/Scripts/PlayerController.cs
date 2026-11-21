@@ -59,7 +59,12 @@ public class PlayerController : MonoBehaviour, IFighterController
     public FighterCommand GetCommand(BaseFighter self)
     {
         FighterCommand cmd = FighterCommand.None;
-        if (moveAction != null) cmd.moveX = moveAction.ReadValue<Vector2>().x;
+        if (moveAction != null)
+        {
+            Vector2 walk = moveAction.ReadValue<Vector2>();
+            cmd.moveX = walk.x;
+            cmd.crouch = walk.y < -0.5f;   // holding down (S) = crouch; down-back = crouching block
+        }
 
         int serial = self is Fighter f ? f.AttackSerial : 0;
         if (attackPressed)
