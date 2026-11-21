@@ -15,6 +15,9 @@ public class Fighter : BaseFighter
 
     private float forwardSpeed = 1f;
     private float backwardSpeed = 1f;
+    private Vector2 crouchHurtboxOffset = new Vector2(0f, 0.105f);
+    private Vector2 crouchHurtboxSize = new Vector2(0.15f, 0.21f);
+    private bool crouching;                  // posture: changes only while free (or in blockstun, to switch block height)
 
     protected AttackData currentAttack;      // null when not attacking
     protected int currentAttackIndex = -1;
@@ -22,7 +25,6 @@ public class Fighter : BaseFighter
     private bool hitThisAttack;              // a swing can only hit once
 
     private Rigidbody2D rb;
-    private Collider2D bodyCollider;
     private Vector2 moveInput;
     private Vector2 velocity;
     private Vector2 startPos;
@@ -33,6 +35,8 @@ public class Fighter : BaseFighter
 
     public CharacterData Data => data;
     public int AttackCount => data != null ? data.attacks.Count : 0;
+    public int CrouchAttackCount => data != null ? data.crouchAttacks.Count : 0;
+    public override bool IsCrouching => crouching;
     public bool IsAttacking => state == FighterState.Attacking;
     public AttackData CurrentAttack => currentAttack;
     public int AttackSerial { get; private set; }   // goes up by one every time an attack starts (the animator watches it)
@@ -53,8 +57,14 @@ public class Fighter : BaseFighter
     }
 
     //block
-    protected override bool WantsToBlock => IsHoldingBack(moveInput.x);
+    // Holding back, or guarding in place (the dummy's Block state)
+    protected override bool WantsToBlock => cmd.guard || IsHoldingBack(moveInput.x);
     protected override bool AllowBlock => state == FighterState.Idle;
+    // A standing block stops mids only; a crouching block stops mids and lows
+    protected override bool CanBlock(AttackData atk) => atk.height != AttackHeight.Low || crouching;
+
+    // Crouching uses the shorter crouch hurtbox
+    public override Rect Hurtbox => crouching ? LocalBoxToWorld(crouchHurtboxOffset, crouchHurtboxSize) : base.Hurtbox;
 
     protected override void OnInterrupted()
     {
@@ -70,7 +80,6 @@ public class Fighter : BaseFighter
         rb = GetComponent<Rigidbody2D>();
         rb.bodyType = RigidbodyType2D.Kinematic;
         rb.gravityScale = 0f;
-        bodyCollider = GetComponent<Collider2D>();
         startPos = rb.position;
         startFacingRight = facingRight;
         SetFacing(facingRight);   // match the sprite to the Facing Right checkbox
@@ -85,6 +94,8 @@ public class Fighter : BaseFighter
         backwardSpeed = character.backwardSpeed;
         hurtboxOffset = character.hurtboxOffset;
         hurtboxSize = character.hurtboxSize;
+        crouchHurtboxOffset = character.crouchHurtboxOffset;
+        crouchHurtboxSize = character.crouchHurtboxSize;
         if (FighterHealth != null) FighterHealth.SetMax(character.maxHealth);
     }
 
@@ -109,19 +120,22 @@ public class Fighter : BaseFighter
     // Lets other code (match setup, training) change who controls this fighter at runtime
     public void SetController(IFighterController newController) => controller = newController;
 
-    public AttackData GetAttack(int index)
+    // Attack number index from the standing list, or the crouching list; null if there's no such attack
+    public AttackData GetAttack(int index, bool crouchingAttack = false)
     {
-        if (data == null || index < 0 || index >= data.attacks.Count) return null;
-        return data.attacks[index];
+        if (data == null) return null;
+        List<AttackData> list = crouchingAttack ? data.crouchAttacks : data.attacks;
+        if (index < 0 || index >= list.Count) return null;
+        return list[index];
     }
 
     // Where an attack's hitbox is right now, in world space
     public Rect AttackHitbox(AttackData atk) => LocalBoxToWorld(atk.hitboxOffset, atk.hitboxSize);
 
     // Would this attack's hitbox touch the opponent if it were active now? (The CPU uses it to judge range.)
-    public bool AttackWouldReach(int index)
+    public bool AttackWouldReach(int index, bool crouchingAttack = false)
     {
-        AttackData atk = GetAttack(index);
+        AttackData atk = GetAttack(index, crouchingAttack);
         return atk != null && opponent != null && opponent.IsHitBy(AttackHitbox(atk));
     }
 
@@ -131,7 +145,7 @@ public class Fighter : BaseFighter
         get
         {
             if (state != FighterState.Attacking || currentAttack == null || !currentAttack.hasExtraHurtbox) return false;
-            int end = currentAttack.extraHurtboxEndTick > 0 ? currentAttack.extraHurtboxEndTick : TotalTicks(currentAttack);
+            int end = currentAttack.extraHurtboxEndTick > 0 ? currentAttack.extraHurtboxEndTick : TotalTicks(currentAttack);// the last tick the extra hurtbox is active, 0 iis active until the attack ends
             return attackTick >= currentAttack.extraHurtboxStartTick && attackTick <= end;
         }
     }
@@ -156,6 +170,7 @@ public class Fighter : BaseFighter
             }
         }
         cmd = controller != null ? controller.GetCommand(this) : FighterCommand.None;
+        if (InputLocked) cmd = FighterCommand.None;   // still ask the controller, so its own timers keep running
         moveInput = new Vector2(cmd.moveX, 0f);
     }
 
@@ -170,9 +185,13 @@ public class Fighter : BaseFighter
             currentAttackIndex = -1;
         }
 
+        // Posture: free to stand or crouch while idle. In blockstun too, so the block height can be switched;
+        // locked during an attack and in hitstun.
+        if (state == FighterState.Idle && !IsHitstun) crouching = cmd.crouch;
+
         if (cmd.attack >= 0 && state == FighterState.Idle && !IsStunned)
         {
-            AttackData atk = GetAttack(cmd.attack);
+            AttackData atk = GetAttack(cmd.attack, crouching);   // crouching → the crouching attack list
             if (atk != null && atk.isValid)
             {
                 state = FighterState.Attacking;
@@ -217,9 +236,9 @@ public class Fighter : BaseFighter
 
         /*WALKING*/
         float x = moveInput.x;
-        if (state != FighterState.Idle || IsStunned)
+        if (state != FighterState.Idle || IsStunned || crouching)
         {
-            velocity.x = 0f;                       // locked in place during the attack
+            velocity.x = 0f;                       // locked in place while attacking, stunned or crouching
         }
         else if (Mathf.Abs(x) > 0.1f)
         {
@@ -233,9 +252,10 @@ public class Fighter : BaseFighter
         }
 
         Vector2 newPos = rb.position + velocity * Time.fixedDeltaTime;
-        //WALL restrict
+        
         newPos.x += ConsumePush();
-        newPos.x = ClampToStage(newPos.x, bodyCollider.bounds.extents.x);
+        //WALL restrict
+        newPos.x = ClampToStage(newPos.x, BodyHalfWidth);
         rb.MovePosition(newPos);
     }
 
@@ -253,6 +273,7 @@ public class Fighter : BaseFighter
     protected override void OnResetFighter()
     {
         OnInterrupted();
+        crouching = false;
         velocity = Vector2.zero;
         moveInput = Vector2.zero;
         rb.position = startPos;

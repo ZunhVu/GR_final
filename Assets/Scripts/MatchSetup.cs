@@ -9,7 +9,9 @@ public class MatchSetup : MonoBehaviour
     [Header("who fights (used when the scene is played without the select screen)")]
     [SerializeField] private CharacterData defaultP1;
     [SerializeField] private CharacterData defaultP2;
-    [SerializeField] private ScriptedCPU.Mode defaultP2Mode = ScriptedCPU.Mode.Basic;
+    [SerializeField] private OpponentType defaultP2Type = OpponentType.CPU;
+    [Tooltip("The dummy's starting state (switch it in the fight with 1 / 2 / 3)")]
+    [SerializeField] private TrainingDummy.State dummyStartState = TrainingDummy.State.Idle;
 
     [Header("scene")]
     [SerializeField] private Transform p1Spawn;
@@ -31,7 +33,7 @@ public class MatchSetup : MonoBehaviour
     {
         CharacterData c1 = MatchSettings.HasPicks ? MatchSettings.p1 : defaultP1;
         CharacterData c2 = MatchSettings.HasPicks ? MatchSettings.p2 : defaultP2;
-        ScriptedCPU.Mode mode = MatchSettings.HasPicks ? MatchSettings.p2Mode : defaultP2Mode;
+        OpponentType p2Type = MatchSettings.HasPicks ? MatchSettings.p2Type : defaultP2Type;
         if (c1 == null || c2 == null)
         {
             Debug.LogError("MatchSetup: no characters picked and no defaults set");
@@ -45,18 +47,32 @@ public class MatchSetup : MonoBehaviour
         P1.SetOpponent(P2);
         P2.SetOpponent(P1);
 
-        // Player 1: human. Player 2: CPU.
+        // Player 1: human
         SetEnabled<ScriptedCPU>(P1, false);
+        SetEnabled<TrainingDummy>(P1, false);
         PlayerController human = GetOrAdd<PlayerController>(P1);
         human.enabled = true;
         human.Init(playerActions);
         P1.SetController(human);
 
+        // Player 2: training dummy or scripted CPU (only that controller stays enabled)
         SetEnabled<PlayerController>(P2, false);
-        ScriptedCPU cpu = GetOrAdd<ScriptedCPU>(P2);
-        cpu.enabled = true;
-        cpu.Init(P1, mode);
-        P2.SetController(cpu);
+        SetEnabled<ScriptedCPU>(P2, false);
+        SetEnabled<TrainingDummy>(P2, false);
+        if (p2Type == OpponentType.Dummy)
+        {
+            TrainingDummy dummy = GetOrAdd<TrainingDummy>(P2);
+            dummy.enabled = true;
+            dummy.Init(P1, dummyStartState);
+            P2.SetController(dummy);
+        }
+        else
+        {
+            ScriptedCPU cpu = GetOrAdd<ScriptedCPU>(P2);
+            cpu.enabled = true;
+            cpu.Init(P1);
+            P2.SetController(cpu);
+        }
 
         // Mirror match: player 2 gets the alternate colours
         ColorPalette p2Palette = c1 == c2 ? c2.altPalette : null;

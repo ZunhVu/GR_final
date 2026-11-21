@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-// Character select screen: player 1 picks, then player 2 (the CPU) is picked and given a mode from a vertical list, then Start loads the fight.
+// Character select screen: player 1 picks, then player 2 is picked and set to Dummy or CPU from a vertical list, then Start loads the fight.
 // Builds one button per character in the roster, so new characters show up without touching this script.
 public class CharacterSelectMenu : MonoBehaviour
 {
@@ -31,10 +31,10 @@ public class CharacterSelectMenu : MonoBehaviour
     [SerializeField, Range(0f, 1f)] private float unusableAlpha = 0.3f;
 
     private CharacterData p1, p2;
-    private ScriptedCPU.Mode selectedMode = ScriptedCPU.Mode.Basic;
+    private OpponentType selectedMode = OpponentType.CPU;
     private readonly List<Button> characterButtons = new List<Button>();
     private readonly List<Button> modeButtons = new List<Button>();
-    private readonly List<ScriptedCPU.Mode> modeOfButton = new List<ScriptedCPU.Mode>();
+    private readonly List<OpponentType> modeOfButton = new List<OpponentType>();
 
     private void Start()
     {
@@ -52,16 +52,16 @@ public class CharacterSelectMenu : MonoBehaviour
             characterButtons.Add(b);
         }
 
-        // One button per CPU mode, listed top to bottom in the container
+        // One button per opponent type (Dummy, CPU), listed top to bottom in the container
         if (modeButtonPrefab != null && modeContainer != null)
         {
-            foreach (ScriptedCPU.Mode m in System.Enum.GetValues(typeof(ScriptedCPU.Mode)))
+            foreach (OpponentType m in System.Enum.GetValues(typeof(OpponentType)))
             {
                 Button b = Instantiate(modeButtonPrefab, modeContainer);
                 b.name = m.ToString();
                 TMP_Text label = b.GetComponentInChildren<TMP_Text>();
                 if (label != null) label.text = m.ToString();
-                ScriptedCPU.Mode mode = m;   // copy for the listener below
+                OpponentType mode = m;   // copy for the listener below
                 b.onClick.AddListener(() => SelectMode(mode));
                 modeButtons.Add(b);
                 modeOfButton.Add(m);
@@ -97,11 +97,11 @@ public class CharacterSelectMenu : MonoBehaviour
         if (p1 == null || p2 == null) return;
         MatchSettings.p1 = p1;
         MatchSettings.p2 = p2;
-        MatchSettings.p2Mode = selectedMode;
+        MatchSettings.p2Type = selectedMode;
         SceneManager.LoadScene(fightScene);
     }
 
-    private void SelectMode(ScriptedCPU.Mode mode)
+    private void SelectMode(OpponentType mode)
     {
         selectedMode = mode;
         Refresh();
@@ -113,7 +113,7 @@ public class CharacterSelectMenu : MonoBehaviour
         bool bothPicked = p1 != null && p2 != null;
         if (instruction != null)
             instruction.text = p1 == null ? "Player 1: choose your fighter"
-                             : p2 == null ? "Choose the CPU's fighter"
+                             : p2 == null ? "Choose the opponent's fighter"
                              : p1.displayName + " vs " + p2.displayName;
 
         SetPreview(p1Preview, p1);
