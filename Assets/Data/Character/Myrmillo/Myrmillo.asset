@@ -35,12 +35,18 @@ MonoBehaviour:
     extraHurtboxSize: {x: 0.08, y: 0.05}
     extraHurtboxStartTick: 6
     extraHurtboxEndTick: 0
+    forwardMove: 0
+    moveStartTick: 1
+    moveEndTick: 0
     damage: 4
     chipDamage: 1
     hitStunTicks: 13
     blockStunTicks: 8
     hitPushback: 0.05
     blockPushback: 0.1
+    canFollowUp: 1
+    knockdown: 0
+    knockdownDownTicks: 0
     counterDamageMultiplier: 1.2
     counterHitBonusStun: 4
     punishDamageMultiplier: 2
@@ -58,14 +64,53 @@ MonoBehaviour:
     extraHurtboxSize: {x: 0, y: 0}
     extraHurtboxStartTick: 0
     extraHurtboxEndTick: 0
+    forwardMove: 0
+    moveStartTick: 1
+    moveEndTick: 0
     damage: 4
     chipDamage: 1
     hitStunTicks: 13
     blockStunTicks: 8
     hitPushback: 0.02
     blockPushback: 0.04
+    canFollowUp: 1
+    knockdown: 0
+    knockdownDownTicks: 0
     counterDamageMultiplier: 1.1
     counterHitBonusStun: 4
     punishDamageMultiplier: 2
     punishCounterBonusStun: 8
+  followUp:
+    name: heavy slash
+    animationState: follow_up
+    height: 0
+    startupTicks: 4
+    activeTicks: 3
+    recoveryTicks: 30
+    hitboxOffset: {x: 0.12, y: 0.156}
+    hitboxSize: {x: 0.14, y: 0.12}
+    extraHurtboxOffset: {x: 0.1, y: 0.15}
+    extraHurtboxSize: {x: 0.3, y: 0.2}
+    extraHurtboxStartTick: 1
+    extraHurtboxEndTick: 0
+    forwardMove: 0.18
+    moveStartTick: 1
+    moveEndTick: 0
+    damage: 15
+    chipDamage: 2
+    hitStunTicks: 20
+    blockStunTicks: 10
+    hitPushback: 0.15
+    blockPushback: 0.1
+    canFollowUp: 0
+    knockdown: 1
+    knockdownDownTicks: 0
+    counterDamageMultiplier: 1.2
+    counterHitBonusStun: 2
+    punishDamageMultiplier: 1.5
+    punishCounterBonusStun: 4
+  followUpWindowTicks: 8
+  knockdownFallTicks: 20
+  knockdownDownTicks: 20
+  knockdownGetUpTicks: 18
   altPalette: {fileID: 11400000, guid: 3138dd9196ff01e4d84f22f44abda2d1, type: 2}

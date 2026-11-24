@@ -14,6 +14,7 @@ the baseline and the training partner for an **RL agent** trained with Unity ML-
 | Area | State |
 |---|---|
 | Movement, facing, stage walls | Done |
+| Body collision (fighters can't pass through each other, the faster one pushes) | Done |
 | Attack with startup / active / recovery frame data | Done (1 attack: Stab) |
 | Blocking, chip damage, hitstun, blockstun, pushback | Done |
 | Counter hit and punish counter | Done |
@@ -22,13 +23,14 @@ the baseline and the training partner for an **RL agent** trained with Unity ML-
 | Input buffer (6 ticks) | Done |
 | Extended hurtbox (the sword arm can be hit during an attack) | Done |
 | Health bars with a sliding damage trail | Done |
-| Rounds: 100 s timer, first to 2, KO / time out / draws, round HUD | Done |
+| Rounds: 100 s timer, first to 2, KO / time out / draws, round HUD, Retry / Quit after the match | Done |
 | Data-driven characters (CharacterData assets) | Done |
 | Palette swap for mirror matches | Done |
 | Menu → Character Select → Fight scene flow | Done |
-| Opponents: training Dummy (Idle / Attack / Block) and scripted CPU | Done |
+| Two modes: **Versus** (against the scripted CPU) and **Training** (against the Dummy: no timer, health refills) | Done |
 | Crouching, crouch hurtbox, crouching block, attack heights (mid / low) | Done (the low attack needs its data and animation) |
-| Target combo, knockdown | Planned |
+| Target combo (follow-up), knockdown | Done (code; the follow-up and knockdown animations still need drawing) |
+| Match logs (setup + every input + events + stats, enough to replay a match) | Done (the replay player itself isn't written yet) |
 | ML-Agents agent, training scene, evaluation | Planned |
 
 ---
@@ -46,9 +48,9 @@ the baseline and the training partner for an **RL agent** trained with Unity ML-
    1. `Assets/Scenes/Menu`
    2. `Assets/Scenes/CharacterSelect`
    3. `Assets/Scenes/FightingScene`
-3. Open **Menu** and press **Play**.
+3. Open **Menu**, press **Play** (Play mode), then **Play** on the menu and choose **Versus** or **Training**.
 
-You can also press Play in **FightingScene** on its own. `MatchSetup` then uses its default characters and CPU mode.
+You can also press Play in **FightingScene** on its own. `MatchSetup` then uses its default characters and **Default Mode**.
 
 ## Controls
 
@@ -58,6 +60,7 @@ You can also press Play in **FightingScene** on its own. `MatchSetup` then uses 
 | Hold **away from the opponent** | Block (standing block: stops mid attacks) |
 | Hold **S** | Crouch (can't walk; **S + back** = crouching block, stops mids and lows) |
 | **J** | Attack: the Stab while standing, the crouching attack (e.g. a low) while crouching |
+| **J** again right after a Stab / low stab **hits or is blocked** | Follow-up (target combo): a heavy slash that knocks down |
 | **R** / **Shift + R** | Restart the round / the whole match (testing) |
 | **1 / 2 / 3** | Against the Dummy: switch it to Idle / Attack / Block |
 | **Escape** | In a fight: back to Character Select |
@@ -68,15 +71,22 @@ The bindings live in `Assets/Input Systems/PlayerInput.inputactions`. The code l
 ## Game flow
 
 ```
-Menu ──Play──► CharacterSelect ──Start──► FightingScene
- ▲   ◄──Back (nothing picked)──┘      ▲         │
- │                                    └─Escape──┘
+Menu ──Play → Versus / Training──► CharacterSelect ──Start──► FightingScene ──match over (Versus)──► Retry (new match) / Quit (→ Menu)
+ ▲   ◄────Back (nothing picked)────┘      ▲         │
+ │                                        └─Escape──┘
 Exit → quits the game (stops Play mode in the Editor)
 ```
 
-On **Character Select**, player 1 picks a fighter, then the opponent's fighter is picked, then the opponent type
-(**Dummy** or **CPU**) is chosen, then Start.
-The picks are carried to the fight scene in `MatchSettings`.
+The **mode** is chosen on the Menu: **Play** opens a page with **Versus** and **Training** (Back or Escape returns). On **Character Select**, player 1 picks a fighter, then the opponent's fighter, then Start.
+The mode and picks are carried to the fight scene in `MatchSettings`.
+
+| | **Versus** | **Training** |
+|---|---|---|
+| Opponent | Scripted CPU | Dummy (Idle / Attack / Block, keys 1 / 2 / 3) |
+| Timer and rounds | 100 s rounds, first to 2 | None: the fight never ends (no intro, timer and round markers hidden) |
+| Health | Lost for the whole round | Refills once a fighter has been free for 1 s (`refillDelayTicks` 60), or right away after a "KO" |
+| Match end | Winner shown, then Retry / Quit | — (leave with **Escape**) |
+| Match logs | Saved | Not saved (MatchRecorder → **Record Training** to change that) |
 
 ---
 
@@ -109,10 +119,20 @@ The fighter can't walk, block or turn around until the attack ends.
   button uses the character's **crouching attacks** list. Posture can change while idle or in blockstun, not mid-attack or in hitstun.
 - **Attack heights:** **Mid** attacks are blocked standing or crouching. **Low** attacks are only blocked crouching.
 - **Trades:** both fighters' hits are collected before either is applied, so two attacks landing on the same tick both hit.
+- **Bodies:** fighters can't walk through each other. When they press into each other, the one moving toward the other
+  faster pushes the slower one back (a standing fighter is pushed at the walker's speed; equal speeds don't move).
 - **Corner pushback:** if the defender is already touching the wall behind it, the attacker is pushed back instead.
 - **Rounds:** each round lasts **100 seconds**. A KO wins the round. At time out, the fighter with more health
   (as a fraction of max) wins it. A double KO or equal health is a draw, and a draw gives **both** fighters the round.
-  The first to **2 rounds** wins the match, then a new match starts. Fighters can't act during "ROUND n / FIGHT!" or after the round ends.
+  The first to **2 rounds** wins the match. After the winner is shown, a **Retry / Quit** menu appears: Retry starts a new match with the same fighters, Quit goes to the main menu. Fighters can't act during "ROUND n / FIGHT!" or after the round ends.
+- **Target combo:** when an attack marked *Can Follow Up* (Stab, low stab) **connects** (hit or blocked, not a whiff), the
+  character's **follow-up** can be started for the next 8 ticks by pressing attack again. It cancels the rest of the first attack
+  and slides the attacker forward (0.1 units over its startup and active ticks), so it still reaches after the first hit's pushback.
+  On hit it combos (window + follow-up startup ≤ the first hit's hitstun). On block there can be a gap the defender can
+  use to attack or back off, and a blocked follow-up is very punishable.
+- **Knockdown:** a clean hit from an attack marked *Knockdown* (the follow-up) makes the receiver fall (20 ticks), lie down (20)
+  and get up (18). During all of it the fighter can't act and **can't be hit**. Falling and getting up take the receiver's own time (CharacterData, to match its animations);
+  how long it lies down can be set per attack (`Knockdown Down Ticks`, 0 = the character's default), so harder knockdowns last longer.
 - **Input buffer:** an Attack press is remembered for 6 ticks, so pressing slightly early (for example during blockstun) still works. One press gives one attack.
 
 ### Frame advantage log
@@ -124,11 +144,29 @@ P1 Myrmillo Stab Blocked: P1 Myrmillo -1 (defender busy 8, attacker busy 9)
 
 `+` means the attacker is free first. `-` means the defender is free first and can punish.
 
+### Match logs
+With a **MatchRecorder** on the RoundManager's GameObject, every match is saved as a JSON file in **`MatchLogs/`**
+(in the project folder, next to `Assets`; in a build, in `Application.persistentDataPath/MatchLogs`). The Console prints the path.
+
+| Part | Contents |
+|---|---|
+| Header | Date, versions, `finished` / `endedBy` (match over, restart, quit), result, winner, round wins, total ticks |
+| `rules` | Ticks per second, round length, rounds to win, pause lengths (all in ticks) |
+| `players` | Character, controller (PlayerController / ScriptedCPU / TrainingDummy / agent), `dataHash` of its gameplay numbers, start position, and **stats**: attacks, hits, counter hits, punishes, blocks, damage dealt / taken, knockdowns, follow-ups, and per move used / hit / blocked |
+| `rounds` | Start and end tick, length, winner, reason, health and positions at the end |
+| `inputs` | `tick,player,moveX,attack,crouch,guard,followUp`, written only when a player's command changes |
+| `events` | A readable timeline: round starts, attacks, hits, blocks, knockdowns, round and match ends, R restarts |
+
+**Replays:** the fight is deterministic (fixed ticks, no randomness inside the fighters), so the characters plus the
+`inputs` are enough to play a match again exactly: spawn the same characters, then feed each recorded command back
+on its tick. The round results (health and positions) let a replay check that it came out the same.
+A log only replays correctly with the **same gameplay numbers**: if a character's `dataHash` differs from the current data, the numbers were changed since.
+
 ---
 
 ## Opponents
 
-Player 2 is either the **Dummy** or the **CPU**. Choose on the select screen, or with **Default P2 Type** on `MatchSetup`.
+Player 2 is the **Dummy** in Training mode and the **CPU** in Versus mode. Choose the mode on the Menu, or with **Default Mode** on `MatchSetup` when playing FightingScene directly.
 
 ### Dummy (`TrainingDummy`)
 A practice opponent with a fixed behaviour. Switch its state during the fight with the number keys.
@@ -143,6 +181,8 @@ The current state is shown in the top-left corner.
 ### CPU (`ScriptedCPU`)
 The rule-based AI and the baseline for the RL agent. Every 8 ticks it decides: block if a nearby attack is in startup
 or active (50%, crouching against lows), otherwise attack if one reaches (60%), step back or wait, otherwise walk in.
+It uses both standing and **crouching attacks**. After the opponent blocks standing, it usually goes for a crouching
+attack (a low), which a standing block can't stop.
 It blocks the way a player does (holding back). Its random choices come from a **seed**, so an evaluation run can be repeated exactly.
 
 ---
@@ -156,7 +196,7 @@ Assets/
   Data/
     Roster.asset             List of selectable characters
     Character/Myrmillo/      Myrmillo.asset (CharacterData), Myrmillo_Gold (ColorPalette)
-  Prefabs/         Myrmillo (fighter), CharacterButton, ModeButton
+  Prefabs/         Myrmillo (fighter), CharacterButton
   Animations/      Animator controllers and clips
   Sprites/         Characters (Aseprite files), stage and UI art
   Input Systems/   PlayerInput.inputactions (Walk, Attack)
@@ -192,7 +232,9 @@ Controllers (IFighterController → FighterCommand { moveX, attack, crouch, guar
 2. Advance       attacks end / start / step forward (the rules decide what's allowed)
 3. CollectHits   active hitboxes touching a hurtbox are recorded, not applied
 4. apply hits    ReceiveHit for every recorded hit (damage, stun, block, counter, push)
-5. Move          stun countdown, facing, walking, pushback, wall clamp
+5. Move          stun countdown, facing, walking, pushback, wall clamp (the new position is only planned)
+6. bodies        overlapping fighters are pushed apart (the faster one wins)
+7. CommitMove    the planned positions are applied
 ```
 
 This keeps the simulation **fair** (trades work, update order doesn't matter) and **deterministic**,
@@ -223,6 +265,7 @@ A character with a unique mechanic (projectile, dash…) can subclass `Fighter` 
 | Frame advantage log | RoundManager → **Log Frame Advantage** |
 | Hit a fighter by hand | Fighter component ⋮ menu → **Debug: Receive Hit** (fill in **Debug Hit** first; hold back to test blocking) |
 | Reset the round | **R** |
+| Match logs | Add **MatchRecorder** to the RoundManager's GameObject. Files go to `MatchLogs/` |
 | Lag handling | RoundManager → **Max Ticks Per Frame** (default 3): after a hitch the game slows down instead of jumping ahead |
 
 The game is capped at 60 fps (`FrameRateLock`, no setup needed).
@@ -240,4 +283,5 @@ The game is capped at 60 fps (`FrameRateLock`, no setup needed).
 
 - RoundManager keeps a single static "active" manager, so only **one arena per scene** is supported for now.
 - Several scripts print to the Console on every hit. That's useful while testing, but it needs turning off before training.
+- **Turn the MatchRecorder off for training**: with auto restart it would write a file for every one of thousands of matches.
 - Sprite atlases with **Tight** packing can't be recoloured (SpriteRecolor warns and leaves those frames unchanged).

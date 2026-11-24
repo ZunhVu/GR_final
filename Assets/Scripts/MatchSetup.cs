@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
+using UnityEngine.Serialization;
 
 // Builds the match when the fight scene starts: spawns both characters and wires up everything
 // that used to be dragged in by hand (opponents, walls, controllers, health bars, round manager).
@@ -9,7 +10,9 @@ public class MatchSetup : MonoBehaviour
     [Header("who fights (used when the scene is played without the select screen)")]
     [SerializeField] private CharacterData defaultP1;
     [SerializeField] private CharacterData defaultP2;
-    [SerializeField] private OpponentType defaultP2Type = OpponentType.CPU;
+    [Tooltip("Training = against the dummy, Versus = against the CPU")]
+    [FormerlySerializedAs("defaultP2Type")]
+    [SerializeField] private GameMode defaultMode = GameMode.Versus;
     [Tooltip("The dummy's starting state (switch it in the fight with 1 / 2 / 3)")]
     [SerializeField] private TrainingDummy.State dummyStartState = TrainingDummy.State.Idle;
 
@@ -33,7 +36,7 @@ public class MatchSetup : MonoBehaviour
     {
         CharacterData c1 = MatchSettings.HasPicks ? MatchSettings.p1 : defaultP1;
         CharacterData c2 = MatchSettings.HasPicks ? MatchSettings.p2 : defaultP2;
-        OpponentType p2Type = MatchSettings.HasPicks ? MatchSettings.p2Type : defaultP2Type;
+        GameMode mode = MatchSettings.HasPicks ? MatchSettings.mode : defaultMode;
         if (c1 == null || c2 == null)
         {
             Debug.LogError("MatchSetup: no characters picked and no defaults set");
@@ -55,11 +58,11 @@ public class MatchSetup : MonoBehaviour
         human.Init(playerActions);
         P1.SetController(human);
 
-        // Player 2: training dummy or scripted CPU (only that controller stays enabled)
+        // Player 2: the training dummy in Training, the scripted CPU in Versus (only that controller stays enabled)
         SetEnabled<PlayerController>(P2, false);
         SetEnabled<ScriptedCPU>(P2, false);
         SetEnabled<TrainingDummy>(P2, false);
-        if (p2Type == OpponentType.Dummy)
+        if (mode == GameMode.Training)
         {
             TrainingDummy dummy = GetOrAdd<TrainingDummy>(P2);
             dummy.enabled = true;
@@ -84,7 +87,11 @@ public class MatchSetup : MonoBehaviour
 
         if (p1HealthBar != null) p1HealthBar.SetTarget(P1.FighterHealth, c1.portrait);
         if (p2HealthBar != null) p2HealthBar.SetTarget(P2.FighterHealth, c2.portrait);
-        if (roundManager != null) roundManager.SetFighters(P1, P2);
+        if (roundManager != null)
+        {
+            roundManager.SetTrainingMode(mode == GameMode.Training);   // before the match starts
+            roundManager.SetFighters(P1, P2);
+        }
     }
 
     private Fighter Spawn(CharacterData character, Transform spawn, bool faceRight, string label)

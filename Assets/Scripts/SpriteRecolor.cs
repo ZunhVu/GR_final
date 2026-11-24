@@ -198,6 +198,7 @@ public class SpriteRecolor : MonoBehaviour
             case ColorPalette.Where.TopPart: return top;
             case ColorPalette.Where.BottomPart: return bottom && !top;
             case ColorPalette.Where.MiddlePart: return !top && !bottom;
+            case ColorPalette.Where.NotBottomPart: return !bottom || top;
         }
         return false;
     }

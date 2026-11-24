@@ -35,6 +35,14 @@ public class AttackData
     public int extraHurtboxEndTick;
     public bool hasExtraHurtbox => extraHurtboxSize.x > 0f && extraHurtboxSize.y > 0f;
 
+    [Header("movement during the attack (world units, toward the opponent; 0 = stays in place)")]
+    [Tooltip("Total distance the attacker slides forward (negative = backwards). Bodies still can't overlap: it pushes the opponent.")]
+    public float forwardMove;
+    [Tooltip("First attack tick of the slide (1 = first startup tick)")]
+    public int moveStartTick = 1;
+    [Tooltip("Last attack tick of the slide. 0 = until the active ticks end")]
+    public int moveEndTick;
+
     [Header("effects on receiver")]
     public int damage;
     public int chipDamage;
@@ -46,6 +54,15 @@ public class AttackData
     public float hitPushback;
     public float blockPushback;
     public bool isValid => activeTicks > 0;
+
+    [Header("target combo / knockdown")]
+    [Tooltip("After this attack connects (hit or blocked, not a whiff), the character's follow-up can be started for a few ticks")]
+    public bool canFollowUp;
+    [Tooltip("A clean hit (not blocked) knocks the receiver down: it falls, lies on the ground and gets up, and can't be hit meanwhile")]
+    public bool knockdown;
+    [Tooltip("Knockdown only: ticks the receiver lies on the ground (a harder knockdown = longer). " +
+             "0 = the receiver's own default. Falling and getting up always take the receiver's own time, to match its animations.")]
+    [Min(0)] public int knockdownDownTicks;
 
     [Header("counter hit")]
     public float counterDamageMultiplier = 1.2f;

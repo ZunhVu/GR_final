@@ -24,8 +24,13 @@ public class FighterAnimator : MonoBehaviour
     private static readonly int CrouchBlockHash = Animator.StringToHash("crouch_block");
     private static readonly int IdleHash = Animator.StringToHash("idle");
     private static readonly int CrouchingHash = Animator.StringToHash("crouching");
+    private static readonly int KnockdownHash = Animator.StringToHash("knockdown");
+    private static readonly int DownHash = Animator.StringToHash("down");
+    private static readonly int GetUpHash = Animator.StringToHash("getup");
     private bool hasCrouchParam;   // the controller may not have IsCrouching yet
     private int lastAttackStateHash;   // Animator state of the most recent attack
+    private BaseFighter.KnockdownPhase lastKnockdownPhase;
+    private string warnedMissingState;
 
     private void Awake()
     {
@@ -59,6 +64,14 @@ public class FighterAnimator : MonoBehaviour
         if (spriteRenderer != null)
             spriteRenderer.sortingOrder = attacking ? attackSortingOrder : idleSortingOrder;
 
+        // Knockdown: play "knockdown" (falling), then "down" (lying), then "getup", each when its phase starts
+        BaseFighter.KnockdownPhase kd = fighter.CurrentKnockdownPhase;
+        if (kd != lastKnockdownPhase)
+        {
+            lastKnockdownPhase = kd;
+            if (kd != BaseFighter.KnockdownPhase.None) PlayKnockdown(kd);
+        }
+
         // A new attack started: jump straight to the start of its clip
         if (fighter.AttackSerial != lastAttackSerial)
         {
@@ -66,12 +79,38 @@ public class FighterAnimator : MonoBehaviour
             AttackData atk = fighter.CurrentAttack;
             if (atk != null && !string.IsNullOrEmpty(atk.animationState))
             {
-                lastAttackStateHash = Animator.StringToHash(atk.animationState);
-                animator.Play(lastAttackStateHash, 0, 0f);
+                int hash = Animator.StringToHash(atk.animationState);
+                if (animator.HasState(0, hash))
+                {
+                    lastAttackStateHash = hash;
+                    animator.Play(hash, 0, 0f);
+                }
+                else WarnMissing(atk.animationState);
             }
         }
 
         UpdatePosture();
+    }
+
+    // Plays the clip for a knockdown phase. Until the new clips exist it falls back to ones that do.
+    private void PlayKnockdown(BaseFighter.KnockdownPhase phase)
+    {
+        int[] tryStates;
+        switch (phase)
+        {
+            case BaseFighter.KnockdownPhase.Fall: tryStates = new[] { KnockdownHash, HitHash }; break;
+            case BaseFighter.KnockdownPhase.Down: tryStates = new[] { DownHash, CrouchHitHash, CrouchingHash }; break;
+            default: tryStates = new[] { GetUpHash, CrouchingHash }; break;
+        }
+        foreach (int s in tryStates)
+            if (animator.HasState(0, s)) { animator.Play(s, 0, 0f); return; }
+    }
+
+    private void WarnMissing(string state)
+    {
+        if (warnedMissingState == state) return;
+        warnedMissingState = state;
+        Debug.LogWarning(name + ": the Animator has no state called \"" + state + "\"");
     }
 
     // Crouching takes priority over the Animator's own transitions, so it shows on the tick it happens:
@@ -81,6 +120,7 @@ public class FighterAnimator : MonoBehaviour
     // Attacks, hits and blocks are started elsewhere (attack serial, OnHitReceived) and take over from this.
     private void UpdatePosture()
     {
+        if (fighter.IsKnockedDown) return;   // PlayKnockdown handles it
         bool crouching = fighter.IsCrouching;
 
         if (fighter.IsBlockstun)
@@ -116,6 +156,7 @@ public class FighterAnimator : MonoBehaviour
         int s = animator.GetCurrentAnimatorStateInfo(0).shortNameHash;
         return s == CrouchingHash || s == CrouchBlockHash || s == CrouchHitHash ||
                s == HitHash || s == BlockHash ||
+               s == KnockdownHash || s == DownHash || s == GetUpHash ||
                (lastAttackStateHash != 0 && s == lastAttackStateHash);
     }
 
@@ -123,7 +164,7 @@ public class FighterAnimator : MonoBehaviour
     // While crouching it plays "crouch_block" / "crouch_hit" if the Animator has them, otherwise the standing ones.
     private void OnHitReceived(BaseFighter.HitType type, AttackData atk)
     {
-        if (type == BaseFighter.HitType.None) return;
+        if (type == BaseFighter.HitType.None || fighter.IsKnockedDown) return;   // a knockdown plays its own clips
         bool blocked = type == BaseFighter.HitType.Blocked;
         int state = blocked ? BlockHash : HitHash;
         if (fighter.IsCrouching)

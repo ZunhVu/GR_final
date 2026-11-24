@@ -4,7 +4,8 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-// Character select screen: player 1 picks, then player 2 is picked and set to Dummy or CPU from a vertical list, then Start loads the fight.
+// Character select screen: player 1 picks, then the opponent's character (the CPU in Versus, the dummy in Training), then Start loads the fight.
+// The mode itself was chosen on the main menu (MatchSettings.mode).
 // Builds one button per character in the roster, so new characters show up without touching this script.
 public class CharacterSelectMenu : MonoBehaviour
 {
@@ -20,21 +21,13 @@ public class CharacterSelectMenu : MonoBehaviour
     [SerializeField] private TMP_Text instruction;         // "Player 1: choose your fighter" etc.
     [SerializeField] private Image p1Preview;              // optional
     [SerializeField] private Image p2Preview;              // optional
-    [Tooltip("A UI Button with a TMP text child. One is made per CPU mode.")]
-    [SerializeField] private Button modeButtonPrefab;
-    [Tooltip("Holds the mode buttons, e.g. an object with a Vertical Layout Group. Shown once both are picked.")]
-    [SerializeField] private Transform modeContainer;
-    [SerializeField] private Color selectedModeColor = new Color(0.83f, 0.7f, 0.12f);   // gold
     [SerializeField] private Button startButton;
     [SerializeField] private Button backButton;
     [Tooltip("How see-through Start and the character buttons are while they can't be pressed (0 = invisible, 1 = solid)")]
     [SerializeField, Range(0f, 1f)] private float unusableAlpha = 0.3f;
 
     private CharacterData p1, p2;
-    private OpponentType selectedMode = OpponentType.CPU;
     private readonly List<Button> characterButtons = new List<Button>();
-    private readonly List<Button> modeButtons = new List<Button>();
-    private readonly List<OpponentType> modeOfButton = new List<OpponentType>();
 
     private void Start()
     {
@@ -52,21 +45,6 @@ public class CharacterSelectMenu : MonoBehaviour
             characterButtons.Add(b);
         }
 
-        // One button per opponent type (Dummy, CPU), listed top to bottom in the container
-        if (modeButtonPrefab != null && modeContainer != null)
-        {
-            foreach (OpponentType m in System.Enum.GetValues(typeof(OpponentType)))
-            {
-                Button b = Instantiate(modeButtonPrefab, modeContainer);
-                b.name = m.ToString();
-                TMP_Text label = b.GetComponentInChildren<TMP_Text>();
-                if (label != null) label.text = m.ToString();
-                OpponentType mode = m;   // copy for the listener below
-                b.onClick.AddListener(() => SelectMode(mode));
-                modeButtons.Add(b);
-                modeOfButton.Add(m);
-            }
-        }
         if (startButton != null) startButton.onClick.AddListener(StartMatch);
         if (backButton != null) backButton.onClick.AddListener(Back);
         Refresh();
@@ -97,36 +75,23 @@ public class CharacterSelectMenu : MonoBehaviour
         if (p1 == null || p2 == null) return;
         MatchSettings.p1 = p1;
         MatchSettings.p2 = p2;
-        MatchSettings.p2Type = selectedMode;
         SceneManager.LoadScene(fightScene);
-    }
-
-    private void SelectMode(OpponentType mode)
-    {
-        selectedMode = mode;
-        Refresh();
     }
 
     // Updates the text, previews and which controls are shown for the current step
     private void Refresh()
     {
         bool bothPicked = p1 != null && p2 != null;
+        bool training = MatchSettings.mode == GameMode.Training;
         if (instruction != null)
-            instruction.text = p1 == null ? "Player 1: choose your fighter"
-                             : p2 == null ? "Choose the opponent's fighter"
-                             : p1.displayName + " vs " + p2.displayName;
+            instruction.text = (training ? "TRAINING - " : "VERSUS - ") +
+                               (p1 == null ? "choose your fighter"
+                              : p2 == null ? (training ? "choose the dummy's fighter" : "choose the CPU's fighter")
+                              : p1.displayName + " vs " + p2.displayName);
 
         SetPreview(p1Preview, p1);
         SetPreview(p2Preview, p2);
         foreach (Button b in characterButtons) SetUsable(b, !bothPicked);   // faded once both are picked
-        if (modeContainer != null) modeContainer.gameObject.SetActive(bothPicked);
-
-        // The chosen mode's button turns gold, the others keep their normal colour
-        for (int i = 0; i < modeButtons.Count; i++)
-        {
-            Graphic g = modeButtons[i].targetGraphic;
-            if (g != null) g.color = modeOfButton[i] == selectedMode ? selectedModeColor : Color.white;
-        }
         SetUsable(startButton, bothPicked);
         SetUsable(backButton, true);   // always usable: undoes a pick, or returns to the menu
     }
