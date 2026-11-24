@@ -23,7 +23,8 @@ public class Fighter : BaseFighter
     protected int currentAttackIndex = -1;
     protected int attackTick;                // ticks since the attack started
     private bool hitThisAttack;              // a swing can only hit once
-    private int followUpTicksLeft;           // > 0: the follow-up can be started (an attack with Can Follow Up just hit)
+    private int followUpTicksLeft;           // > 0: the follow-up can be started (an attack with Can Follow Up just connected)
+    private bool followUpAfterBlock;         // the window was opened by a blocked attack (the follow-up won't combo)
 
     // currentAttackIndex while the follow-up is running (it isn't in either attack list)
     public const int FollowUpIndex = -2;
@@ -53,6 +54,8 @@ public class Fighter : BaseFighter
     public bool HasFollowUp => data != null && data.followUp != null && data.followUp.isValid;
     public bool FollowUpAvailable => followUpTicksLeft > 0 && HasFollowUp && CanAct;
     public int FollowUpTicksLeft => FollowUpAvailable ? followUpTicksLeft : 0;
+    // True when the open window came from a blocked attack: the follow-up is then a risk, not a guaranteed combo
+    public bool FollowUpAfterBlock => FollowUpAvailable && followUpAfterBlock;
     public bool IsFollowUp => state == FighterState.Attacking && currentAttackIndex == FollowUpIndex;
 
     //Active when the character has passed the startup timing and before the recovery starts
@@ -96,6 +99,7 @@ public class Fighter : BaseFighter
         if (type == HitType.None) return;
         if (!CanAct || atk == null || !atk.canFollowUp || !HasFollowUp) return;   // e.g. a trade: we were hit too
         followUpTicksLeft = data.followUpWindowTicks;
+        followUpAfterBlock = type == HitType.Blocked;
     }
 
     protected virtual void Awake()
