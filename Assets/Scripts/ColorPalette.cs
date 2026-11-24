@@ -17,6 +17,7 @@ public class ColorPalette : ScriptableObject
         MiddlePart,     // part is neither top nor bottom (blade)
         BottomPart,     // part starts low and reaches the feet (shin guard)
         NextToColor,    // the pixel touches the "with" colour, diagonals included (arm wrap is light and shadow mixed)
+        NotBottomPart,  // any part except a bottom part (top or middle); not affected by topLimit
     }
 
     [System.Serializable]
@@ -42,7 +43,7 @@ public class ColorPalette : ScriptableObject
     [Range(0, 16)] public int tolerance = 2;   // per channel, 0-255, in case of compression
 
     [Header("part position (fraction of sprite height, from the top)")]
-    [Range(0f, 1f)] public float topLimit = 0.25f;      // a part starting above this is a top part
+    [Range(0f, 1f)] public float topLimit = 0.4f;       // a part starting above this is a top part
     [Range(0f, 1f)] public float bottomLimit = 0.65f;   // a bottom part starts below this...
     [Range(0f, 1f)] public float bottomReach = 0.85f;   // ...and reaches below this (the feet)
 
@@ -53,6 +54,9 @@ public class ColorPalette : ScriptableObject
         Color32 metalLight = C(0x939393), metalMid = C(0x757575), metalDark = C(0x5B5B5B);
         Color32 armLight = C(0xDCD5CB), armShadow = C(0xBEB5A7);
         Color32 gold = C(0xD4B21F), darkGold = C(0xA98D17), darkestGold = C(0x7D6A16), red = C(0xCF2424);
+        // belt plate: painted with its own greys (look the same as the metal), so it can be told apart from the sword
+        Color32 plateLight = C(0x8C8C8C), plateMid = C(0x6E6E6E), plateDark = C(0x545454);
+        Color32 redMid = C(0xA51C1C), redDark = C(0x7A1414);
 
         // Each metal shade is its own material, so the grey shield in the damaged frames doesn't join up with the shin guard
         materials = new List<PartMaterial>
@@ -64,6 +68,10 @@ public class ColorPalette : ScriptableObject
         };
         swaps = new List<ColorSwap>
         {
+            // belt plate
+            new ColorSwap { from = plateLight, to = red,     where = Where.Everywhere },
+            new ColorSwap { from = plateMid,   to = redMid,  where = Where.Everywhere },
+            new ColorSwap { from = plateDark,  to = redDark, where = Where.Everywhere },
             // helmet
             new ColorSwap { from = metalLight, to = gold,        where = Where.TopPart },
             new ColorSwap { from = metalMid,   to = darkGold,    where = Where.TopPart },
@@ -75,8 +83,9 @@ public class ColorPalette : ScriptableObject
             // arm guard: light and shadow pixels alternate, so its light pixels always touch a shadow pixel
             new ColorSwap { from = armLight,  to = gold,     where = Where.NextToColor, with = armShadow },
             new ColorSwap { from = armShadow, to = darkGold, where = Where.Everywhere },
-            // lower body cloth: the light cloth left in the middle of the body (the ankle wrap is a bottom part, so it stays)
-            new ColorSwap { from = armLight,  to = red,      where = Where.MiddlePart },
+            // lower body cloth: the light cloth left anywhere above the feet (the ankle wrap is a bottom part, so it stays).
+            // Not MiddlePart: in some frames the skirt touches the arm wrap, and that joined part starts high up
+            new ColorSwap { from = armLight,  to = red,      where = Where.NotBottomPart },
         };
     }
 

@@ -5,7 +5,8 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// Runs the fight: every tick it steps all fighters together, counts down the round timer, and ends the round
-/// on a KO or time out. The first fighter to win roundsToWin rounds wins the match, then a new match starts.
+/// on a KO or time out. The first fighter to win roundsToWin rounds wins the match, then the Retry / Quit menu (MatchEndMenu) shows,
+/// or a new match starts by itself when autoRestartMatch is on (training).
 /// fighters[0] is P1 and fighters[1] is P2 for rounds, timer and announcements.
 /// Works with any script that inherits BaseFighter (player, dummy, CPU, AI).
 /// </summary>
@@ -23,7 +24,16 @@ public class RoundManager : MonoBehaviour
     [Tooltip("Before each round, fighters can't act (shows \"ROUND n\" / \"FIGHT\"). Set 0 for training.")]
     [SerializeField, Min(0)] private float introDelay = 1f;
     [SerializeField, Min(0)] private float roundOverDelay = 1.5f;   // shows K.O. / TIME before the next round
-    [SerializeField, Min(0)] private float matchOverDelay = 3f;     // shows the winner before a new match
+    [SerializeField, Min(0)] private float matchOverDelay = 3f;     // shows the winner before the Retry / Quit menu
+
+    [Tooltip("Start a new match by itself after matchOverDelay (for training). Off: wait for Retry (MatchEndMenu)")]
+    [SerializeField] private bool autoRestartMatch = false;
+
+    [Header("training mode (set by MatchSetup)")]
+    [Tooltip("No intro, no timer, no rounds: the fight goes on until you leave")]
+    [SerializeField] private bool trainingMode = false;
+    [Tooltip("Training: a fighter's health refills once it has been free (not stunned or knocked down) this many ticks")]
+    [SerializeField, Min(0)] private int refillDelayTicks = 60;
 
     [Header("debug")]
     [Tooltip("Most ticks run in one frame after a slow frame. Higher catches up on lag by skipping ahead " +
@@ -37,6 +47,7 @@ public class RoundManager : MonoBehaviour
     private readonly int[] wins = new int[2];
 
     private Phase phase;
+    private int[] freeTicks = new int[2];   // training: ticks each fighter has been free, for the health refill
     private int phaseTicksLeft;   // ticks left in Intro / RoundOver / MatchOver
     private int timerTicksLeft;   // round clock, counted in ticks so it is exact and repeatable
 
@@ -50,10 +61,35 @@ public class RoundManager : MonoBehaviour
     public int TimeLeftSeconds => Mathf.CeilToInt(timerTicksLeft * Time.fixedDeltaTime);   // 100 → 0 on screen
     public string Announcement { get; private set; } = "";   // "ROUND 1", "FIGHT!", "K.O.", "TIME", "P1 WINS" ...
     public int LastRoundWinner { get; private set; } = -1;    // 0 = P1, 1 = P2, -1 = draw
+    public int MatchWinnerIndex { get; private set; } = -2;   // 0 = P1, 1 = P2, -1 = draw, -2 = match not over
+    // The match is over and the winner has been shown for matchOverDelay: time for the Retry / Quit menu
+    public bool WaitingForRetry => phase == Phase.MatchOver && phaseTicksLeft <= 0 && !autoRestartMatch;
+
+    public string LastRoundReason { get; private set; } = "";  // "K.O.", "DOUBLE K.O." or "TIME"
+    // Ticks since the match started (0 = the first tick of the match). Inputs in a match log are stamped with it.
+    public int MatchTick { get; private set; }
+    public float RoundTimeSeconds => roundTimeSeconds;
+    public int IntroTicks => SecondsToTicks(introDelay);
+    public int RoundOverTicks => Mathf.Max(1, SecondsToTicks(roundOverDelay));
+    public int MatchOverTicks => Mathf.Max(1, SecondsToTicks(matchOverDelay));
+    public int FighterCount => fighters != null ? fighters.Length : 0;
+    public BaseFighter GetFighter(int i) => Fighter(i);
+    public bool IsTrainingMode => trainingMode;
+
+    // Training: endless fight against the dummy. Call before the match starts (MatchSetup does).
+    public void SetTrainingMode(bool on) => trainingMode = on;
 
     // winner index: 0 = P1, 1 = P2, -1 = draw
     public event Action<int> RoundEnded;
     public event Action<int> MatchEnded;
+
+    // For the match recorder (and anything else that watches the fight). They only read, never change the game.
+    public event Action MatchStarted;                 // a new match begins (scores 0 - 0)
+    public event Action<int> RoundStarted;            // round number; also when R restarts a round
+    public event Action CommandsRead;                 // every tick, right after all fighters read their command
+    public event Action<BaseFighter.PendingHit, BaseFighter.HitType, int> HitApplied;   // hit, result, damage done
+    public event Action TickFinished;                 // every tick, after everything (moves, timer, round end)
+    public event Action<bool> ManualRestart;          // R pressed (false = round, true = whole match), before the restart
 
     // True if a RoundManager steps this fighter, so the fighter shouldn't step itself
     public static bool Drives(BaseFighter f) =>
@@ -90,6 +126,7 @@ public class RoundManager : MonoBehaviour
     {
         if (fighters == null) return;
         StepFighters();
+        int tickDone = MatchTick;
 
         switch (phase)
         {
@@ -99,6 +136,7 @@ public class RoundManager : MonoBehaviour
                 break;
 
             case Phase.Fighting:
+                if (trainingMode) { RefillHealth(); break; }   // no clock, no KO
                 if (timerTicksLeft > 0) timerTicksLeft--;
                 CheckRoundEnd();
                 break;
@@ -112,9 +150,13 @@ public class RoundManager : MonoBehaviour
                 break;
 
             case Phase.MatchOver:
-                if (--phaseTicksLeft <= 0) StartMatch();
+                if (phaseTicksLeft > 0) phaseTicksLeft--;
+                if (phaseTicksLeft <= 0 && autoRestartMatch) StartMatch();
                 break;
         }
+
+        // A new match may have started during this tick (auto restart): then the counter starts again at 0
+        if (MatchTick == tickDone) { TickFinished?.Invoke(); MatchTick++; }
     }
 
     // One tick for everyone, phase by phase. Each phase finishes for every fighter before the next starts,
@@ -122,6 +164,7 @@ public class RoundManager : MonoBehaviour
     private void StepFighters()
     {
         foreach (BaseFighter f in fighters) if (f != null) f.ReadCommand();
+        CommandsRead?.Invoke();
         foreach (BaseFighter f in fighters) if (f != null) f.Advance();
 
         hits.Clear();
@@ -130,12 +173,53 @@ public class RoundManager : MonoBehaviour
         {
             foreach (BaseFighter.PendingHit h in hits)
             {
+                int healthBefore = h.target.FighterHealth != null ? h.target.FighterHealth.Current : 0;
                 BaseFighter.HitType type = h.target.ReceiveHit(h.attack, h.attackerX, h.attacker);
+                int damage = h.target.FighterHealth != null ? healthBefore - h.target.FighterHealth.Current : 0;
+                if (type != BaseFighter.HitType.None) HitApplied?.Invoke(h, type, damage);
                 if (logFrameAdvantage && type != BaseFighter.HitType.None && h.attacker != null) LogAdvantage(h, type);
             }
         }
 
         foreach (BaseFighter f in fighters) if (f != null) f.Move();
+
+        // Bodies can't overlap: push every overlapping pair apart, then apply the moves
+        for (int i = 0; i < fighters.Length; i++)
+            for (int j = i + 1; j < fighters.Length; j++)
+                if (fighters[i] != null && fighters[j] != null) SeparateBodies(fighters[i], fighters[j]);
+        foreach (BaseFighter f in fighters) if (f != null) f.CommitMove();
+    }
+
+    // Fighters can't pass through each other. When their bodies would overlap, the one moving toward the other
+    // faster wins: the overlap is shared out so that the slower one gives way more.
+    //   walking into a standing fighter → it is pushed along at the walker's speed
+    //   both walking in at the same speed → neither moves
+    //   one faster than the other → both slide toward the slower one's side at the difference in speed
+    private static void SeparateBodies(BaseFighter a, BaseFighter b)
+    {
+        // Sides come from where they were before this tick, so walking can never swap them
+        bool aIsLeft = a.LastX < b.LastX || (Mathf.Approximately(a.LastX, b.LastX) && a.FacingRight);
+        BaseFighter left = aIsLeft ? a : b;
+        BaseFighter right = aIsLeft ? b : a;
+
+        float minGap = left.BodyHalfWidth + right.BodyHalfWidth;
+        float overlap = minGap - (right.PlannedX - left.PlannedX);
+        if (overlap <= 0f) return;
+
+        // How hard each pushes: how far it moved toward the other this tick (walking or being pushed by a hit)
+        float leftPush = Mathf.Max(0f, left.PlannedX - left.LastX);
+        float rightPush = Mathf.Max(0f, right.LastX - right.PlannedX);
+        float total = leftPush + rightPush;
+        float leftGivesBack = total > 0f ? rightPush / total : 0.5f;   // the slower one gives back the bigger share
+
+        left.ShiftPlanned(-overlap * leftGivesBack);
+        right.ShiftPlanned(overlap * (1f - leftGivesBack));
+
+        // One of them was stopped by a wall: the other has to give back the rest
+        overlap = minGap - (right.PlannedX - left.PlannedX);
+        if (overlap > 0f) left.ShiftPlanned(-overlap);
+        overlap = minGap - (right.PlannedX - left.PlannedX);
+        if (overlap > 0f) right.ShiftPlanned(overlap);
     }
 
     // ---------- rounds ----------
@@ -168,6 +252,7 @@ public class RoundManager : MonoBehaviour
         else wins[winner]++;
 
         LastRoundWinner = winner;
+        LastRoundReason = reason;
         phase = Phase.RoundOver;
         phaseTicksLeft = Mathf.Max(1, SecondsToTicks(roundOverDelay));
         Announcement = reason;
@@ -191,6 +276,7 @@ public class RoundManager : MonoBehaviour
     private void EndMatch()
     {
         int winner = MatchWinner();
+        MatchWinnerIndex = winner;
         phase = Phase.MatchOver;
         phaseTicksLeft = Mathf.Max(1, SecondsToTicks(matchOverDelay));
         Announcement = winner == -1 ? "DRAW" : "P" + (winner + 1) + " WINS";
@@ -201,8 +287,11 @@ public class RoundManager : MonoBehaviour
     public void StartMatch()
     {
         started = true;
+        MatchWinnerIndex = -2;
         wins[0] = wins[1] = 0;
         RoundNumber = 1;
+        MatchTick = 0;
+        MatchStarted?.Invoke();
         StartRound();
     }
 
@@ -215,8 +304,13 @@ public class RoundManager : MonoBehaviour
 
         timerTicksLeft = RoundTicks;
         LastRoundWinner = -1;
+        LastRoundReason = "";
+        RoundStarted?.Invoke(RoundNumber);
 
-        int intro = SecondsToTicks(introDelay);
+        if (freeTicks.Length != FighterCount) freeTicks = new int[FighterCount];
+        System.Array.Clear(freeTicks, 0, freeTicks.Length);
+
+        int intro = trainingMode ? 0 : SecondsToTicks(introDelay);   // training starts right away
         if (intro > 0)
         {
             phase = Phase.Intro;
@@ -235,6 +329,20 @@ public class RoundManager : MonoBehaviour
         phase = Phase.Fighting;
         Announcement = "";
         LockInput(false);
+    }
+
+    // Training: once a fighter has recovered for refillDelayTicks (or right away after a "KO"), its health is full again,
+    // so combos can be practised forever
+    private void RefillHealth()
+    {
+        for (int i = 0; i < FighterCount; i++)
+        {
+            BaseFighter f = fighters[i];
+            if (f == null || f.FighterHealth == null) continue;
+            freeTicks[i] = f.CanAct ? freeTicks[i] + 1 : 0;
+            bool hurt = f.FighterHealth.Current < f.FighterHealth.Max;
+            if (hurt && f.CanAct && (f.IsKO || freeTicks[i] >= refillDelayTicks)) f.FighterHealth.ResetHealth();
+        }
     }
 
     private void LockInput(bool locked)
@@ -270,7 +378,9 @@ public class RoundManager : MonoBehaviour
         Keyboard k = Keyboard.current;
         if (k != null && k.rKey.wasPressedThisFrame)
         {
-            if (k.shiftKey.isPressed) StartMatch();
+            bool wholeMatch = k.shiftKey.isPressed;
+            ManualRestart?.Invoke(wholeMatch);
+            if (wholeMatch) StartMatch();
             else StartRound();
         }
     }

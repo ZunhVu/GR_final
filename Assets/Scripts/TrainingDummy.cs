@@ -54,6 +54,7 @@ public class TrainingDummy : MonoBehaviour, IFighterController
                 // Ask every tick; the fighter only starts one when it's free, so attacks come out back to back
                 if (self is Fighter f && f.AttackCount > 0) cmd.attack = rng.Next(f.AttackCount);
                 else cmd.attack = 0;
+                cmd.followUp = true;   // and always finish with the follow-up when a hit allows it
                 break;
 
             case State.Block:

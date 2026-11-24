@@ -40,15 +40,17 @@ public class RoundHUD : MonoBehaviour
     {
         if (roundManager == null) return;
 
+        bool training = roundManager.IsTrainingMode;   // no clock and no rounds in training: hide them
         if (timerText != null)
         {
+            timerText.enabled = !training;
             int t = roundManager.TimeLeftSeconds;
             timerText.text = t.ToString();
             timerText.color = t <= lowTimeSeconds ? timerLowColor : timerColor;
         }
 
-        SetMarkers(p1RoundMarkers, roundManager.Wins(0));
-        SetMarkers(p2RoundMarkers, roundManager.Wins(1));
+        SetMarkers(p1RoundMarkers, roundManager.Wins(0), !training);
+        SetMarkers(p2RoundMarkers, roundManager.Wins(1), !training);
 
         if (announcementText != null)
         {
@@ -58,10 +60,14 @@ public class RoundHUD : MonoBehaviour
         }
     }
 
-    private void SetMarkers(Image[] markers, int won)
+    private void SetMarkers(Image[] markers, int won, bool visible)
     {
         if (markers == null) return;
         for (int i = 0; i < markers.Length; i++)
-            if (markers[i] != null) markers[i].color = i < won ? markerWonColor : markerEmptyColor;
+        {
+            if (markers[i] == null) continue;
+            markers[i].enabled = visible;
+            markers[i].color = i < won ? markerWonColor : markerEmptyColor;
+        }
     }
 }

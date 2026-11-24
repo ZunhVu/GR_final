@@ -23,10 +23,15 @@ public class Fighter : BaseFighter
     protected int currentAttackIndex = -1;
     protected int attackTick;                // ticks since the attack started
     private bool hitThisAttack;              // a swing can only hit once
+    private int followUpTicksLeft;           // > 0: the follow-up can be started (an attack with Can Follow Up just hit)
+
+    // currentAttackIndex while the follow-up is running (it isn't in either attack list)
+    public const int FollowUpIndex = -2;
 
     private Rigidbody2D rb;
     private Vector2 moveInput;
     private Vector2 velocity;
+    private float plannedY;
     private Vector2 startPos;
     private bool startFacingRight;
     private IFighterController controller;   // player, scripted CPU or RL agent on this GameObject
@@ -34,12 +39,21 @@ public class Fighter : BaseFighter
     private FighterCommand cmd;              // this tick's command, read in ReadCommand
 
     public CharacterData Data => data;
+    public override FighterCommand LastCommand => cmd;
+    public IFighterController Controller => controller;
     public int AttackCount => data != null ? data.attacks.Count : 0;
     public int CrouchAttackCount => data != null ? data.crouchAttacks.Count : 0;
     public override bool IsCrouching => crouching;
     public bool IsAttacking => state == FighterState.Attacking;
     public AttackData CurrentAttack => currentAttack;
     public int AttackSerial { get; private set; }   // goes up by one every time an attack starts (the animator watches it)
+
+    // Follow-up (target combo): for a few ticks after an attack with Can Follow Up hits, the follow-up can be started,
+    // cancelling whatever is left of that attack. Players press attack again; the RL agent / CPU send cmd.followUp.
+    public bool HasFollowUp => data != null && data.followUp != null && data.followUp.isValid;
+    public bool FollowUpAvailable => followUpTicksLeft > 0 && HasFollowUp && CanAct;
+    public int FollowUpTicksLeft => FollowUpAvailable ? followUpTicksLeft : 0;
+    public bool IsFollowUp => state == FighterState.Attacking && currentAttackIndex == FollowUpIndex;
 
     //Active when the character has passed the startup timing and before the recovery starts
     public bool HitboxActive =>
@@ -73,6 +87,15 @@ public class Fighter : BaseFighter
         currentAttackIndex = -1;
         attackTick = 0;
         hitThisAttack = false;
+        followUpTicksLeft = 0;   // got hit: the combo is broken
+    }
+
+    // Our attack reached the opponent (hit or blocked, not a whiff). If the attack allows it, this opens the follow-up window.
+    protected override void OnHitLanded(HitType type, AttackData atk)
+    {
+        if (type == HitType.None) return;
+        if (!CanAct || atk == null || !atk.canFollowUp || !HasFollowUp) return;   // e.g. a trade: we were hit too
+        followUpTicksLeft = data.followUpWindowTicks;
     }
 
     protected virtual void Awake()
@@ -96,6 +119,9 @@ public class Fighter : BaseFighter
         hurtboxSize = character.hurtboxSize;
         crouchHurtboxOffset = character.crouchHurtboxOffset;
         crouchHurtboxSize = character.crouchHurtboxSize;
+        knockdownFallTicks = character.knockdownFallTicks;
+        knockdownDownTicks = character.knockdownDownTicks;
+        knockdownGetUpTicks = character.knockdownGetUpTicks;
         if (FighterHealth != null) FighterHealth.SetMax(character.maxHealth);
     }
 
@@ -153,9 +179,9 @@ public class Fighter : BaseFighter
     // Where the extended hurtbox is right now, in world space (only meaningful while ExtraHurtboxActive)
     public Rect ExtraHurtbox => LocalBoxToWorld(currentAttack.extraHurtboxOffset, currentAttack.extraHurtboxSize);
 
-    // Body hurtbox, plus the attack's extended hurtbox on the ticks it exists
+    // Body hurtbox, plus the attack's extended hurtbox on the ticks it exists (nothing while knocked down)
     public override bool IsHitBy(Rect hitbox) =>
-        base.IsHitBy(hitbox) || (ExtraHurtboxActive && hitbox.Overlaps(ExtraHurtbox));
+        !IsKnockedDown && (base.IsHitBy(hitbox) || (ExtraHurtboxActive && hitbox.Overlaps(ExtraHurtbox)));
 
     /*COMMAND*/
     public override void ReadCommand()
@@ -187,28 +213,40 @@ public class Fighter : BaseFighter
 
         // Posture: free to stand or crouch while idle. In blockstun too, so the block height can be switched;
         // locked during an attack and in hitstun.
-        if (state == FighterState.Idle && !IsHitstun) crouching = cmd.crouch;
+        if (IsKnockedDown) crouching = false;
+        else if (state == FighterState.Idle && !IsHitstun) crouching = cmd.crouch;
 
-        if (cmd.attack >= 0 && state == FighterState.Idle && !IsStunned)
+        if (cmd.followUp && FollowUpAvailable)
+        {
+            // Target combo: cancels the rest of the attack that hit (or starts right away if it already ended)
+            crouching = false;   // the follow-up is done standing
+            StartAttack(data.followUp, FollowUpIndex);
+        }
+        else if (cmd.attack >= 0 && state == FighterState.Idle && CanAct)
         {
             AttackData atk = GetAttack(cmd.attack, crouching);   // crouching → the crouching attack list
-            if (atk != null && atk.isValid)
-            {
-                state = FighterState.Attacking;
-                currentAttack = atk;
-                currentAttackIndex = cmd.attack;
-                attackTick = 0;
-                hitThisAttack = false;
-                AttackSerial++;
-                OnAttackStarted(currentAttackIndex);
-            }
+            if (atk != null && atk.isValid) StartAttack(atk, cmd.attack);
         }
+
+        if (followUpTicksLeft > 0) followUpTicksLeft--;
 
         if (state == FighterState.Attacking)
         {
             attackTick++;   // 1 = first startup tick ... TotalTicks = last recovery tick
             OnAttackTick(currentAttackIndex, attackTick);
         }
+    }
+
+    private void StartAttack(AttackData atk, int index)
+    {
+        state = FighterState.Attacking;
+        currentAttack = atk;
+        currentAttackIndex = index;
+        attackTick = 0;
+        hitThisAttack = false;
+        followUpTicksLeft = 0;   // starting anything closes the window
+        AttackSerial++;
+        OnAttackStarted(currentAttackIndex);
     }
 
     private static int TotalTicks(AttackData atk) => atk.startupTicks + atk.activeTicks + atk.recoveryTicks;
@@ -232,13 +270,13 @@ public class Fighter : BaseFighter
         TickStun();
 
         /*FACING: only turn when not attacking*/
-        if (state == FighterState.Idle && !IsStunned) UpdateFacing();
+        if (state == FighterState.Idle && CanAct) UpdateFacing();
 
         /*WALKING*/
         float x = moveInput.x;
-        if (state != FighterState.Idle || IsStunned || crouching)
+        if (state != FighterState.Idle || !CanAct || crouching)
         {
-            velocity.x = 0f;                       // locked in place while attacking, stunned or crouching
+            velocity.x = 0f;                       // locked in place while attacking, stunned, knocked down or crouching
         }
         else if (Mathf.Abs(x) > 0.1f)
         {
@@ -251,13 +289,30 @@ public class Fighter : BaseFighter
             velocity.x = 0f;
         }
 
+        LastX = rb.position.x;
         Vector2 newPos = rb.position + velocity * Time.fixedDeltaTime;
-        
+        newPos.x += AttackStep();   // attacks that slide forward (e.g. the follow-up)
+
         newPos.x += ConsumePush();
         //WALL restrict
         newPos.x = ClampToStage(newPos.x, BodyHalfWidth);
-        rb.MovePosition(newPos);
+        PlannedX = newPos.x;   // applied in CommitMove, after the bodies are separated
+        plannedY = newPos.y;
     }
+
+    // This tick's share of the current attack's forward slide, in world x (spread evenly over its ticks)
+    private float AttackStep()
+    {
+        if (state != FighterState.Attacking || currentAttack == null || currentAttack.forwardMove == 0f) return 0f;
+        int start = Mathf.Max(1, currentAttack.moveStartTick);
+        int end = currentAttack.moveEndTick > 0 ? currentAttack.moveEndTick
+                                                : currentAttack.startupTicks + currentAttack.activeTicks;
+        if (end < start || attackTick < start || attackTick > end) return 0f;
+        float perTick = currentAttack.forwardMove / (end - start + 1);
+        return facingRight ? perTick : -perTick;
+    }
+
+    public override void CommitMove() => rb.MovePosition(new Vector2(PlannedX, plannedY));
 
     public override AttackPhase CurrentAttackPhase
     {
@@ -283,7 +338,7 @@ public class Fighter : BaseFighter
 
     // ---- Hooks for characters with unique mechanics (override in a subclass) ----
 
-    // Called on the tick an attack starts
+    // Called on the tick an attack starts (index = FollowUpIndex for the follow-up)
     protected virtual void OnAttackStarted(int index) { }
 
     // Called every tick of an attack, tick 1 being the first. E.g. spawn a projectile on a given tick.

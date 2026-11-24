@@ -7,8 +7,9 @@ public struct FighterCommand
     public int attack;    // -1 = no attack, otherwise the attack index (from the crouching list while crouching)
     public bool crouch;   // hold to crouch: can't walk, can still block (and blocks lows), attacks use the crouching list
     public bool guard;    // block in place without holding back (the training dummy's Block state; players block by holding back)
+    public bool followUp; // start the follow-up (target combo) if it is available right now; ignored otherwise
 
-    public static FighterCommand None => new FighterCommand { moveX = 0f, attack = -1, crouch = false, guard = false };
+    public static FighterCommand None => new FighterCommand { moveX = 0f, attack = -1, crouch = false, guard = false, followUp = false };
 }
 
 // Anything that can drive a fighter. Put the component on the same GameObject as the fighter.

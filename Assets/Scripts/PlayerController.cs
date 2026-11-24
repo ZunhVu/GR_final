@@ -81,6 +81,7 @@ public class PlayerController : MonoBehaviour, IFighterController
         if (bufferLeft > 0)
         {
             cmd.attack = 0;
+            cmd.followUp = true;   // pressing attack again after a hit gives the follow-up (only used when it's available)
             bufferLeft--;
         }
         return cmd;

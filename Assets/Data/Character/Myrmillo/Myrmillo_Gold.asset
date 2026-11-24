@@ -34,6 +34,36 @@ MonoBehaviour:
   swaps:
   - from:
       serializedVersion: 2
+      rgba: 4287401100
+    to:
+      serializedVersion: 2
+      rgba: 4280558799
+    where: 0
+    with:
+      serializedVersion: 2
+      rgba: 0
+  - from:
+      serializedVersion: 2
+      rgba: 4285427310
+    to:
+      serializedVersion: 2
+      rgba: 4280032421
+    where: 0
+    with:
+      serializedVersion: 2
+      rgba: 0
+  - from:
+      serializedVersion: 2
+      rgba: 4283716692
+    to:
+      serializedVersion: 2
+      rgba: 4279506042
+    where: 0
+    with:
+      serializedVersion: 2
+      rgba: 0
+  - from:
+      serializedVersion: 2
       rgba: 4287861651
     to:
       serializedVersion: 2
@@ -118,11 +148,11 @@ MonoBehaviour:
     to:
       serializedVersion: 2
       rgba: 4280558799
-    where: 2
+    where: 5
     with:
       serializedVersion: 2
       rgba: 0
   tolerance: 2
-  topLimit: 0.25
+  topLimit: 0.4
   bottomLimit: 0.65
   bottomReach: 0.85

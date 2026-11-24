@@ -45,7 +45,8 @@ public abstract class BaseFighter : MonoBehaviour
 
     // Would this hitbox touch any part of this fighter that can be hit? Every hit check goes through here,
     // so a fighter with extra hurtboxes (e.g. an extended sword arm) overrides this to include them.
-    public virtual bool IsHitBy(Rect hitbox) => hitbox.Overlaps(Hurtbox);
+    // A knocked-down fighter can't be hit at all.
+    public virtual bool IsHitBy(Rect hitbox) => !IsKnockedDown && hitbox.Overlaps(Hurtbox);
 
     // Turns a box measured on the sprite (facing right, before scale) into world space.
     // The fighter's scale is negative on x when facing left, which mirrors the offset automatically.
@@ -61,11 +62,40 @@ public abstract class BaseFighter : MonoBehaviour
     public bool IsHitstun { get; private set; }
     public bool IsBlockstun { get; private set; }
     public bool IsStunned => IsHitstun || IsBlockstun;
-    public int StunTicksLeft => IsStunned ? stunTicks : 0;
+    public int StunTicksLeft => IsKnockedDown ? knockdownTicks : IsStunned ? stunTicks : 0;
+
+    //knockdown: falls, lies down, gets up. Can't act and can't be hit for the whole time.
+    [Header("knockdown (ticks; a Fighter takes these from its CharacterData)")]
+    [SerializeField] protected int knockdownFallTicks = 20;
+    [SerializeField] protected int knockdownDownTicks = 20;     // default lying time; an attack can set its own
+    [SerializeField] protected int knockdownGetUpTicks = 18;
+    private int knockdownTicks;                 // ticks left until standing and free again
+    private bool knockdownStartedThisTick;
+    private int downTicks;                      // lying time of the current knockdown (set by the attack)
+    public enum KnockdownPhase { None, Fall, Down, GetUp }
+    public bool IsKnockedDown => knockdownTicks > 0;
+    public int KnockdownTicksLeft => knockdownTicks;
+    // Length of the current knockdown (or of a default one when not knocked down)
+    public int KnockdownTotalTicks => knockdownFallTicks + (IsKnockedDown ? downTicks : knockdownDownTicks) + knockdownGetUpTicks;
+    public KnockdownPhase CurrentKnockdownPhase
+    {
+        get
+        {
+            if (!IsKnockedDown) return KnockdownPhase.None;
+            if (knockdownTicks <= knockdownGetUpTicks) return KnockdownPhase.GetUp;
+            if (knockdownTicks <= knockdownGetUpTicks + downTicks) return KnockdownPhase.Down;
+            return KnockdownPhase.Fall;
+        }
+    }
+    // Free to walk, block and attack: not in hitstun, blockstun or knockdown
+    public bool CanAct => !IsStunned && !IsKnockedDown;
 
     // Ticks until this fighter's current action is over and it can act again (0 when free).
     // Used for the frame advantage log; a Fighter reports what's left of its attack.
     public virtual int RecoveryTicksLeft => 0;
+
+    // The command this fighter used on the current tick (after InputLocked). The match recorder saves it.
+    public virtual FighterCommand LastCommand => FighterCommand.None;
 
     //FILL IT YOURSELF
     //Each fighter script resets its own position, facing, state, and so on here.
@@ -95,8 +125,18 @@ public abstract class BaseFighter : MonoBehaviour
     public virtual void ReadCommand() { }                          // 1. ask the controller what to do
     public virtual void Advance() { }                              // 2. start / advance attacks
     public virtual void CollectHits(List<PendingHit> hits) { }     // 3. add the hits this fighter lands
-    public virtual void Move() { }                                 // 5. stun countdown, facing, movement
+    public virtual void Move() { }                                 // 5. stun countdown, facing, movement (only planned)
                                                                    // (4. all hits are applied in between)
+                                                                   // 6. bodies are separated (RoundManager.SeparateBodies)
+    public virtual void CommitMove() { }                           // 7. apply the planned position
+
+    // Body collision: Move() doesn't move the fighter yet, it plans the new x. RoundManager then pushes
+    // overlapping bodies apart, and CommitMove() applies the result.
+    public float PlannedX { get; protected set; }   // where this fighter will be at the end of the tick
+    public float LastX { get; protected set; }      // where it was before this tick's move
+
+    // Moves the planned position (used when bodies push each other), never through a wall
+    public void ShiftPlanned(float dx) => PlannedX = ClampToStage(PlannedX + dx, BodyHalfWidth);
 
     private readonly List<PendingHit> soloHits = new List<PendingHit>();
 
@@ -110,13 +150,14 @@ public abstract class BaseFighter : MonoBehaviour
         CollectHits(soloHits);
         foreach (PendingHit h in soloHits) h.target.ReceiveHit(h.attack, h.attackerX, h.attacker);   // solo: no advantage log
         Move();
+        CommitMove();
     }
 
     //Got hit
     // attacker is optional: when given, pushback goes to the attacker instead if this fighter is already cornered
     public HitType ReceiveHit(AttackData atk, float attackerX, BaseFighter attacker = null)
     {
-        if (IsKO) return HitType.None;
+        if (IsKO || IsKnockedDown) return HitType.None;
 
         AttackPhase phase = CurrentAttackPhase;
         bool blocked = !IsHitstun && AllowBlock && WantsToBlock && CanBlock(atk);
@@ -161,12 +202,27 @@ public abstract class BaseFighter : MonoBehaviour
             stunTicks = stun;
             stunStartedThisTick = true;
             ApplyPushback(pushDir, atk.hitPushback, atk.hitStunTicks, attacker);
-            
+            if (atk.knockdown) StartKnockdown(atk);
         }
         Debug.Log(name + " " + type + " by " + atk.name);
         OnInterrupted();
         HitReceived?.Invoke(type, atk);
+        if (attacker != null && attacker != this) attacker.OnHitLanded(type, atk);
         return type;
+    }
+
+    // Called on the attacker after its attack reached the opponent (blocked or not). Fighter uses it to open the follow-up window.
+    protected virtual void OnHitLanded(HitType type, AttackData atk) { }
+
+    // Replaces the hitstun: the fighter falls, lies down and gets up, and can't act or be hit until it's over
+    private void StartKnockdown(AttackData atk)
+    {
+        IsHitstun = false;
+        IsBlockstun = false;
+        stunTicks = 0;
+        downTicks = atk.knockdownDownTicks > 0 ? atk.knockdownDownTicks : knockdownDownTicks;   // the attack decides how long it lies
+        knockdownTicks = Mathf.Max(1, knockdownFallTicks + downTicks + knockdownGetUpTicks);
+        knockdownStartedThisTick = true;   // like stun: counting starts next tick
     }
     private static float SafeMult(float m) => m > 0f ? m : 1f;
 
@@ -182,6 +238,11 @@ public abstract class BaseFighter : MonoBehaviour
 
     protected void TickStun()
     {
+        if (IsKnockedDown)
+        {
+            if (knockdownStartedThisTick) knockdownStartedThisTick = false;
+            else knockdownTicks--;
+        }
         if (!IsStunned) return;
         if (stunStartedThisTick)
         {
@@ -217,9 +278,9 @@ public abstract class BaseFighter : MonoBehaviour
         return x <= leftWall.bounds.max.x + half + touching;
     }
 
-    // Half the body's width, the same value used to keep the body inside the walls
+    // Half the body's width: keeps the body inside the walls and stops fighters walking through each other
     private Collider2D body;
-    protected float BodyHalfWidth
+    public float BodyHalfWidth
     {
         get
         {
@@ -254,6 +315,9 @@ public abstract class BaseFighter : MonoBehaviour
         IsBlockstun = false;
         stunTicks = 0;
         stunStartedThisTick = false;
+        knockdownTicks = 0;
+        knockdownStartedThisTick = false;
+        downTicks = 0;
         pushTicksLeft=0;
         pushPerTick = 0f;
         OnResetFighter();

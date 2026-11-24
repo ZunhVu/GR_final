@@ -30,6 +30,19 @@ public class CharacterData : ScriptableObject
     [Tooltip("Used while crouching, e.g. a low attack at index 0. The same attack button gives these when crouching.")]
     public List<AttackData> crouchAttacks = new List<AttackData>();
 
+    [Header("follow-up (target combo)")]
+    [Tooltip("Started by pressing attack again soon after an attack with 'Can Follow Up' connects (hit or blocked). " +
+             "Usually has 'Knockdown' ticked. Leave Active Ticks at 0 for a character with no follow-up.")]
+    public AttackData followUp = new AttackData();
+    [Tooltip("How many ticks after the hit the follow-up can still be started. " +
+             "Window + follow-up startup should be at most the first attack's hitstun, so it always combos.")]
+    [Min(1)] public int followUpWindowTicks = 8;
+
+    [Header("knockdown (ticks; the animations should be about this long)")]
+    [Min(1)] public int knockdownFallTicks = 20;    // "knockdown" clip: hit and falling
+    [Min(0)] public int knockdownDownTicks = 20;    // "down" clip: lying on the ground
+    [Min(1)] public int knockdownGetUpTicks = 18;   // "getup" clip: standing back up
+
     [Header("mirror match")]
     [Tooltip("Colours for player 2 when both players pick this character. Leave empty to use the same colours.")]
     public ColorPalette altPalette;
