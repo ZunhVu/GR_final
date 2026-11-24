@@ -24,8 +24,10 @@ public class ScriptedCPU : MonoBehaviour, IFighterController
     [SerializeField, Range(0f, 1f)] private float lowVsStandingBlockChance = 0.7f;
     [Tooltip("How long (ticks) the CPU remembers that the opponent blocked standing")]
     [SerializeField, Min(0)] private int rememberBlockTicks = 60;
-    [Tooltip("After one of its attacks hits, the chance to finish with the follow-up (knockdown)")]
-    [SerializeField, Range(0f, 1f)] private float followUpChance = 0.7f;
+    [Tooltip("After one of its attacks hits, the chance to finish with the follow-up (a guaranteed combo into a knockdown)")]
+    [SerializeField, Range(0f, 1f)] private float followUpChance = 0.8f;
+    [Tooltip("After one of its attacks is blocked, the chance to use the follow-up anyway (risky: it can be punished)")]
+    [SerializeField, Range(0f, 1f)] private float followUpOnBlockChance = 0.15f;
     [Tooltip("Ticks it takes to notice the hit before pressing the follow-up")]
     [SerializeField, Min(0)] private int followUpDelayTicks = 2;
     [SerializeField] private int seed = 1;   // same seed, same choices, so evaluation runs can be repeated
@@ -87,7 +89,7 @@ public class ScriptedCPU : MonoBehaviour, IFighterController
             if (followUpWait < 0)
             {
                 followUpWait = followUpDelayTicks;
-                followUpGo = Roll(followUpChance);
+                followUpGo = Roll(f.FollowUpAfterBlock ? followUpOnBlockChance : followUpChance);   // mostly on hit, rarely on block
             }
             if (followUpGo && followUpWait-- <= 0) cmd.followUp = true;
         }

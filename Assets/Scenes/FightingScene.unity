@@ -2878,7 +2878,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1978194993}
   - component: {fileID: 1978194992}
-  - component: {fileID: 1978194994}
+  - component: {fileID: 1978194995}
   m_Layer: 0
   m_Name: RoundManager
   m_TagString: Untagged
@@ -2926,7 +2926,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &1978194994
+--- !u!114 &1978194995
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -2935,14 +2935,15 @@ MonoBehaviour:
   m_GameObject: {fileID: 1978194991}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c9884bc3f04bfb04ead72c03c191cdc2, type: 3}
+  m_Script: {fileID: 11500000, guid: d00456c30b96ea74b87c0f2eb1aae53e, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::MatchEndMenu
+  m_EditorClassIdentifier: Assembly-CSharp::MatchRecorder
   roundManager: {fileID: 1978194992}
-  panel: {fileID: 1086350774}
-  retryButton: {fileID: 609456636}
-  quitButton: {fileID: 1071571300}
-  quitScene: Menu
+  record: 1
+  saveUnfinished: 1
+  recordTraining: 0
+  logAttackStarts: 1
+  folderName: MatchLogs
 --- !u!1 &2031577041
 GameObject:
   m_ObjectHideFlags: 0

@@ -269,7 +269,7 @@ GameObject:
   - component: {fileID: 97072230}
   - component: {fileID: 97072229}
   m_Layer: 5
-  m_Name: Exit Button
+  m_Name: BackButton
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -1153,7 +1153,7 @@ MonoBehaviour:
   playButton: {fileID: 272916073}
   exitButton: {fileID: 1896787313}
   modePage: {fileID: 1311297523}
-  versusButton: {fileID: 272916073}
+  versusButton: {fileID: 491049573}
   trainingButton: {fileID: 1890620081}
   backButton: {fileID: 97072229}
   characterSelectScene: CharacterSelect

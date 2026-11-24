@@ -98,7 +98,7 @@ What a fighter **does**, using its `CharacterData`.
 | `GetAttack(i)`, `AttackHitbox(atk)`, `AttackWouldReach(i)` | Attack lookup, hitbox rectangle, "would it hit right now?" |
 | `ReadCommand` | Gets this tick's `FighterCommand` |
 | `Advance` | Ends a finished attack, starts the follow-up if `cmd.followUp` and it is available (cancelling the attack that hit), otherwise starts a requested attack if idle and free, steps the attack tick |
-| `HasFollowUp`, `FollowUpAvailable`, `FollowUpTicksLeft`, `IsFollowUp`, `FollowUpIndex` (-2) | Target combo: for `followUpWindowTicks` after a `canFollowUp` attack connects (hit or blocked, not a whiff). Closed by starting any attack or being hit |
+| `HasFollowUp`, `FollowUpAvailable`, `FollowUpTicksLeft`, `FollowUpAfterBlock`, `IsFollowUp`, `FollowUpIndex` (-2) | Target combo: for `followUpWindowTicks` after a `canFollowUp` attack connects (hit or blocked, not a whiff). Closed by starting any attack or being hit |
 | `CollectHits` | Records a hit (once per swing) when the active hitbox overlaps the opponent |
 | `Move` | Stun / knockdown countdown, facing, walking (locked while attacking, stunned or knocked down), the attack's forward slide (`AttackStep`), pushback, wall clamp. Sets `PlannedX`; `CommitMove` then calls `rb.MovePosition` |
 | `CurrentAttackPhase`, `HitboxActive`, `RecoveryTicksLeft` | Attack timing information |
@@ -175,7 +175,7 @@ block (chance, crouching against lows) if `IsThreatened` → attack (chance) if 
   same tick, so the fighter crouches and takes the crouching list.
 - **Going low:** the CPU remembers for `rememberBlockTicks` (60) that the opponent blocked standing. Then, with
   `lowVsStandingBlockChance` (70%), it tries the crouching attacks first, because a low gets past a standing block.
-- **Follow-up:** checked every tick. When `FollowUpAvailable`, it decides once (`followUpChance`, 70%) and presses after `followUpDelayTicks` (2).
+- **Follow-up:** checked every tick. When `FollowUpAvailable`, it decides once and presses after `followUpDelayTicks` (2): `followUpChance` (80%) after a hit, where it combos, but only `followUpOnBlockChance` (15%) after a block (`FollowUpAfterBlock`), where it can be punished.
 - A knocked-down opponent can't be hit, so `AttackWouldReach` is false and the CPU just walks in while it gets up.
 - `Roll(chance)` makes a weighted random yes/no.
 - All randomness comes from `System.Random(seed)`, so runs are repeatable.
